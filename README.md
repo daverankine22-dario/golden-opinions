@@ -23,7 +23,6 @@ test/           API tests (node --test)
 ## Run it locally
 
 ```bash
-cp .env.example .env            # then set NODE_ENV= (blank), PUBLIC_URL=http://localhost:3000, DEV_SHOW_CODES=1
 npm run seed-sample             # optional: a sample survey with all 8 answer types (English + Spanish)
 npm run create-admin -- you@company.com "Your Name"   # prints a password once
 npm run dev                     # http://localhost:3000 and http://localhost:3000/admin

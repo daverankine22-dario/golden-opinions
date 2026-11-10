@@ -32,7 +32,7 @@ export const config = {
   postmark: { token: e.POSTMARK_SERVER_TOKEN || '', stream: e.POSTMARK_STREAM || 'outbound', broadcastStream: e.POSTMARK_BROADCAST_STREAM || '' },
   emailFrom: e.EMAIL_FROM || 'Golden Opinions <no-reply@example.com>',
   // Test mode: when no SMS/email provider is configured, codes are shown on screen and messages go to the outbox log only.
-  devShowCodes: bool(e.DEV_SHOW_CODES),
+  devShowCodes: bool(e.DEV_SHOW_CODES) || process.argv.includes('--dev'),
 };
 config.smsEnabled = !!(config.twilio.sid && config.twilio.token && (config.twilio.messagingService || config.twilio.from));
 config.emailEnabled = !!config.postmark.token;

@@ -9,7 +9,7 @@
   },
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning src/server.js",
-    "dev": "DEV_SHOW_CODES=1 node --disable-warning=ExperimentalWarning --watch src/server.js",
+    "dev": "node --disable-warning=ExperimentalWarning --watch src/server.js --dev",
     "create-admin": "node --disable-warning=ExperimentalWarning scripts/create-admin.js",
     "seed-sample": "node --disable-warning=ExperimentalWarning scripts/seed-sample.js",
     "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js",
