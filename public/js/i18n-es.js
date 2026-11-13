@@ -71,7 +71,7 @@ export const I18N_RX=[
 [/^Est\. value (\$[\d.,]+) each\*$/,'Valor est. $1 c/u*'],[/^Est\. value (\$[\d.,]+)\*$/,'Valor est. $1*'],[/^est\. value (\$[\d.,]+)$/,'valor est. $1'],
 [/^(\d+) winners have won gold$/,'$1 ganadores han ganado oro'],
 [/^🏆 (\d+) winners · (.+) each$/,'🏆 $1 ganadores · $2 c/u'],
-[/^\*Estimated using the official Goldback exchange rate of (\$[\d.,]+) per Goldback as of (.+?)\. Prizes are Goldback® notes; 1 Goldback contains 1\/1000 troy oz of 24K gold\. Actual value is based on the official exchange rate on the drawing day\.$/,'*Estimado con el tipo de cambio oficial de Goldback de $1 por Goldback al $2. Los premios son billetes Goldback®; 1 Goldback contiene 1/1000 oz troy de oro de 24K. El valor real depende del tipo de cambio oficial el día del sorteo.'],
+[/^\*Estimated using the official Gold Note exchange rate of (\$[\d.,]+) per 1\/1000 troy oz as of (.+?)\. Prizes are Gold Notes containing 24K gold\. Actual value is based on the official exchange rate on the drawing day\.$/,'*Estimado con el tipo de cambio oficial de Gold Note de $1 por 1/1000 oz troy al $2. Los premios son Gold Notes de oro de 24K. El valor real depende del tipo de cambio oficial el día del sorteo.'],
 [/^· Signed in as (.+)$/,'· Sesión iniciada como $1'],[/^Signed in as (.+) ·$/,'Sesión iniciada como $1 ·'],
 [/^We sent a 6-digit code to (.+)\.$/,'Enviamos un código de 6 dígitos a $1.'],
 [/^We sent it by text to (.+) and by email to (.+)\.$/,'Lo enviamos por mensaje de texto a $1 y por correo a $2.'],

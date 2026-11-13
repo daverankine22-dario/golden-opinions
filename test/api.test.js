@@ -54,7 +54,7 @@ test('admin log-in with password + emailed code', async () => {
   assert.equal((await new Client().get('/api/admin/data')).status, 401, 'participants cannot reach admin data');
 });
 
-test('admin creates a survey and sets the Goldback rate', async () => {
+test('admin creates a survey and sets the Gold Note rate', async () => {
   const qs = ['single', 'multi', 'dropdown', 'likert', 'rating', 'slider', 'matrix', 'text'].map((t, i) => Object.assign(newQuestion(t, 'q' + i), { text: 'Question ' + i }));
   qs[2].options = [...STATES];
   surveyId = 's_test1';

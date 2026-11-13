@@ -4,7 +4,7 @@ import { config } from './config.js';
 import { all, get, run, tx, rowParticipant, rowSurvey, rowResponse, rowWinner, saveSurvey, saveWinner, getSetting, setSetting, audit, parse } from './db.js';
 import { HttpError, bad, newId, sha256, sixDigits, jsonBody, sendJson, createSession, readSession, endSession, rateLimit, clientIp, checkPassword, safeEqual } from './http.js';
 import { T as MSG, queueEmail, queueSms, sendBoth } from './messaging.js';
-import { WIN_CAP, CLAIM_DAYS, STATES, localDay, addDays, wStatus, surveyProblems, estValue, prizeLabel, shortPrize, gbOf, noteParts, GB_OZ, winnersCountOf, fmtPhone, answerText, L } from '../public/js/shared.js';
+import { WIN_CAP, CLAIM_DAYS, STATES, localDay, addDays, wStatus, surveyProblems, estValue, prizeLabel, prizePhrase, shortPrize, gbOf, noteParts, GB_OZ, winnersCountOf, fmtPhone, answerText, L } from '../public/js/shared.js';
 
 const today = () => localDay(Date.now(), config.timeZone);
 const dayRx = /^\d{4}-\d{2}-\d{2}$/;
@@ -121,10 +121,10 @@ export function adminRoutes(r) {
     res.end('﻿' + rows.join('\r\n'));
   });
 
-  /* ----- Goldback exchange rate ----- */
+  /* ----- Gold Note exchange rate (per 1/1000 oz) ----- */
   r.put('/api/admin/settings/goldback', async (req, res) => {
     const a = requireAdmin(req); const b = await jsonBody(req); const v = Number(b.rate);
-    if (!(v > 0 && v < 10000)) throw bad('Enter the rate for 1 Goldback');
+    if (!(v > 0 && v < 10000)) throw bad('Enter the rate for a 1/1000 oz Gold Note');
     const old = getSetting('goldback') || {};
     setSetting('goldback', { rate: +v.toFixed(2), updatedAt: Date.now(), history: [...(old.history || []), { rate: +v.toFixed(2), at: Date.now(), by: a.email }].slice(-120) });
     audit(a.id, 'settings.goldback', { rate: v });
@@ -137,7 +137,7 @@ export function adminRoutes(r) {
     const date = dayRx.test(b.date || '') ? b.date : today();
     const deadline = dayRx.test(b.claimDeadline || '') ? b.claimDeadline : addDays(today(), CLAIM_DAYS);
     const rate = Number(b.gbRate) || (getSetting('goldback') || {}).rate;
-    if (!(rate > 0)) throw bad(`Set the Goldback rate first: the draw checks the $${WIN_CAP} limit per person over 12 months.`, { code: 'no_rate' });
+    if (!(rate > 0)) throw bad(`Set the Gold Note rate first: the draw checks the $${WIN_CAP} limit per person over 12 months.`, { code: 'no_rate' });
     const result = tx(() => {
       const s = surveyById(params.id); if (!s) throw new HttpError(404, 'Survey not found');
       const prizeVal = estValue(s, rate);
@@ -214,7 +214,7 @@ export function adminRoutes(r) {
     if (!b.sms && !b.email) throw bad('Choose text, email or both.');
     rateLimit('campaign:' + a.id, 10, 3600);
     const title = String(b.title || '').trim().slice(0, 120) || 'New survey — win gold!';
-    const defaultMsg = lang => lang === 'es' ? `Hay una nueva encuesta de Golden Opinions: "${L(s, 'title', 'es')}". Responde unas preguntas y participa para ganar ${prizeLabel(s, 'es')}.` : `A new Golden Opinions survey is live: "${s.title}". Answer a few questions for a chance to win ${prizeLabel(s)}!`;
+    const defaultMsg = lang => lang === 'es' ? `Hay una nueva encuesta de Golden Opinions: "${L(s, 'title', 'es')}". Responde unas preguntas y participa para ganar ${prizePhrase(s, 'es')}.` : `A new Golden Opinions survey is live: "${s.title}". Answer a few questions for a chance to win ${prizePhrase(s)}!`;
     const msgEn = String(b.message || '').trim().slice(0, 600) || defaultMsg('en');
     const msgEs = String(b.message_es || '').trim().slice(0, 600) || (b.message ? msgEn : defaultMsg('es'));
     const titleEs = String(b.title_es || '').trim().slice(0, 120) || title;
@@ -248,7 +248,7 @@ function winnerFromBody(base, b) {
   w.state = STATES.includes(b.state) ? b.state : w.state;
   if (!w.firstName || !w.state) throw bad('Add a first name and state');
   Object.assign(w, prizeFields({ ...w, ...b }));
-  if (!(w.goldbacks > 0)) throw bad('Choose the Goldback note');
+  if (!(w.goldbacks > 0)) throw bad('Choose the Gold Note');
   w.date = dayRx.test(b.date || '') ? b.date : (w.date || today());
   w.gbRate = Number(b.gbRate ?? w.gbRate) || 0;
   w.estValue = estValue(w, w.gbRate);

@@ -25,9 +25,10 @@ export const LIKERT_ES = {
   frequency: { 3: ['Nunca','A veces','Siempre'], 5: ['Nunca','Rara vez','A veces','A menudo','Siempre'], 7: ['Nunca','Muy rara vez','Rara vez','A veces','A menudo','Muy a menudo','Siempre'] },
 };
 
-/* ---------- prizes: Goldback notes ----------
-   1 Goldback = 1/1000 troy oz of 24K gold.
-   Value = number of Goldbacks × the official Goldback exchange rate (goldback.com, updated daily 10 AM MST). */
+/* ---------- prizes: Gold Notes ----------
+   Prizes are Gold Notes containing 24K gold. The smallest note holds 1/1000 troy oz; internally, prize sizes are
+   counted in those 1/1000 oz units (the `goldbacks` field). Value = units × the official Gold Note exchange rate
+   per 1/1000 oz, published daily by the issuer (10 AM MST). */
 export const G_PER_OZ = 31.1035;
 export const GB_OZ = 0.001;
 export const GB_CHOICES = [{ n: 1, l: '1/1000' }, { n: 2, l: '1/500' }, { n: 5, l: '1/200' }, { n: 10, l: '1/100' }];
@@ -50,13 +51,19 @@ export const goldConv = (n, unit) => n > 0 ? '= ' + goldText(n, unit === 'g' ? '
 export function prizeLabel(x, lang = 'en') {
   const n = gbOf(x); if (!n) return x.prize || '';
   const { qty, denom } = noteParts(x); const g = goldText(n, x.goldUnit);
-  if (lang === 'es') return qty > 1 ? `${qty} billetes de ${fmtNum(denom)} Goldback (${g} de oro)` : `Billete de ${fmtNum(n)} Goldback (${g} de oro)`;
-  return qty > 1 ? `${qty} × ${fmtNum(denom)} Goldback notes (${g} gold)` : `${fmtNum(n)} Goldback note (${g} gold)`;
+  const dl = goldText(denom, x.goldUnit);
+  if (lang === 'es') return qty > 1 ? `${qty} Gold Notes de ${dl} (${g} de oro en total)` : `Gold Note de ${g}`;
+  return qty > 1 ? `${qty} × ${dl} Gold Notes (${g} gold in total)` : `${g} Gold Note`;
+}
+// prize with an article, for sentences: "a 1/100 oz Gold Note" / "una Gold Note de 1/100 oz" / "2 × 1/100 oz Gold Notes"
+export function prizePhrase(x, lang = 'en') {
+  const label = prizeLabel(x, lang); if (!gbOf(x) || noteParts(x).qty > 1) return label;
+  return (lang === 'es' ? 'una ' : 'a ') + label;
 }
 export function shortPrize(x) {
   const n = gbOf(x); if (!n) return x.prize || 'Gold';
   const { qty, denom } = noteParts(x);
-  return qty > 1 ? `${qty}×${fmtNum(denom)} Goldback (${goldText(n, x.goldUnit)})` : `${fmtNum(n)} Goldback (${goldText(n, x.goldUnit)})`;
+  return qty > 1 ? `${qty}×${goldText(denom, x.goldUnit)} Gold Notes` : `${goldText(n, x.goldUnit)} Gold Note`;
 }
 export const estValue = (x, rate) => { const n = gbOf(x); return n && rate > 0 ? +(n * rate).toFixed(2) : 0; };
 export const winnersCountOf = s => Math.max(1, parseInt(s.winnersCount) || 1);
@@ -169,7 +176,7 @@ export function surveyProblems(s) {
     if (q.type === 'matrix' && !(q.rows || []).length) errs.push(`Question ${i + 1} needs at least 1 row.`);
     if (q.type === 'slider' && !(+q.max > +q.min)) errs.push(`Question ${i + 1}: max must be greater than min.`);
   });
-  if (!(gbOf(s) > 0)) errs.push("Choose the Goldback note for this survey's prize.");
+  if (!(gbOf(s) > 0)) errs.push("Choose the Gold Note for this survey's prize.");
   if (s.drawDate && s.endsAt && s.drawDate < s.endsAt) errs.push('The drawing date should be on or after the end date.');
   return errs;
 }

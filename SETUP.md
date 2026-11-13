@@ -71,8 +71,8 @@ Log in at `https://admin.goldenopinions.com`: email + password, then the 6-digit
 
 ## 6. Set up your first survey
 
-1. **Overview → Goldback exchange rate**: enter today's rate from goldback.com (updated daily at 10 AM MST).
-2. **Surveys & reports → + New survey** (or **+ Sample survey** to see every answer type). Fill in the Spanish (🇪🇸 Español) sections, choose the number of winners and the Goldback note per winner, set the end and drawing dates, and use **Preview on phone**.
+1. **Overview → Gold Note exchange rate**: enter today's rate for a 1/1000 oz Gold Note from the issuer's website (updated daily at 10 AM MST).
+2. **Surveys & reports → + New survey** (or **+ Sample survey** to see every answer type). Fill in the Spanish (🇪🇸 Español) sections, choose the number of winners and the Gold Note per winner, set the end and drawing dates, and use **Preview on phone**.
 3. Set **Status → Live** and save.
 4. Make the QR code for your posters point at `https://goldenopinions.com`.
 
@@ -80,13 +80,13 @@ Log in at `https://admin.goldenopinions.com`: email + password, then the 6-digit
 
 - [ ] Your attorney has finalized the **Terms, Privacy Policy and Official Rules**. A developer replaces the template text in `public/js/app.js` (`viewLegal`), including the mail-in entry address and sponsor details. Get a professional Spanish translation.
 - [ ] Each survey's total prize pool is under **$5,000**, or you've registered and bonded in New York and Florida.
-- [ ] Goldback, Inc. has confirmed you can use their name and images.
+- [ ] Your attorney has decided whether to name the Gold Notes' issuer, and the issuer has approved any use of its name or images.
 - [ ] Twilio campaign approved and Postmark approved. The admin header shows "Texts on" and "Email on" (not TEST MODE).
 - [ ] Soft launch: staff and friends sign up, take a survey, receive codes and confirmations, you draw them as test winners, they claim, you mark shipped. Then delete the test survey or close it.
 
 ## 8. Drawing day
 
-1. Update the **Goldback exchange rate** after 10 AM MST.
+1. Update the **Gold Note exchange rate** after 10 AM MST.
 2. Open the survey's report → **Draw N winners** → check the date, rate and claim deadline → **Draw & notify**. Winners get a text and an email immediately; anyone who would exceed $999 in 12 months is skipped automatically.
 3. **Winners → To ship**: when someone claims, buy or pull the notes, ship them insured with tracking, then **Mark shipped** (the winner is notified).
 4. Reminders go out automatically on day 3 and day 7. After the deadline, **Draw alternate** fills the spot.

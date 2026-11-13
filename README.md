@@ -3,7 +3,7 @@
 Take surveys, win gold. A mobile web app for participants, an admin console for your team, and the server behind both.
 
 - **Participant app** (`/`): create account / log in with a 6-digit code by text and email, account recovery, English/Español, pick a survey, all 8 answer types, save a draft, review, submit, confirmations, messages, settings, recent winners, claim a prize.
-- **Admin console** (`/admin`, optionally only on `admin.yourdomain.com`): staff log-in (password + emailed code), survey builder with Spanish translations and phone preview, searchable reports with charts and CSV download, Goldback exchange rate, random server-side draws for many winners, winner notices, reminders, claims, shipping, campaigns, participants.
+- **Admin console** (`/admin`, optionally only on `admin.yourdomain.com`): staff log-in (password + emailed code), survey builder with Spanish translations and phone preview, searchable reports with charts and CSV download, Gold Note exchange rate, random server-side draws for many winners, winner notices, reminders, claims, shipping, campaigns, participants.
 - **Rules enforced on the server**: one entry per survey per email and per phone (also enforced by the database), $999 maximum winnings per person in any 12 months, random draws using a cryptographic shuffle with an audit log, log-in codes that expire after 10 minutes and lock after 5 wrong tries, rate limits.
 
 ## Tech
@@ -53,5 +53,5 @@ All state-changing requests must send `X-Requested-With: fetch` (CSRF guard). Se
 
 - **Scale**: `/api/admin/data` loads everything for the console — add paging when you pass ~50,000 responses.
 - **Postgres**: SQL lives in `src/db.js`, `src/participant.js` and `src/admin.js`; moving to Postgres means swapping the driver and placeholders.
-- **Goldback rate**: entered by staff today. If Goldback, Inc. provides a data feed, fetch it in the background job in `src/server.js`.
+- **Gold Note rate**: entered by staff today (per 1/1000 oz). If the issuer provides a data feed, fetch it in the background job in `src/server.js`. Internally, prize sizes are stored as 1/1000 oz units in the `goldbacks` field.
 - **Legal text**: Terms, Privacy and Official Rules in `public/js/app.js` (`viewLegal`) are templates — replace with your attorney's final versions and a professional Spanish translation.

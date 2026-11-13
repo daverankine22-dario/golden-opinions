@@ -66,7 +66,7 @@ function publicSurvey(s, withQuestions) {
 
 /* ---------- routes ---------- */
 export function participantRoutes(r) {
-  // Public home data: live surveys, recent winners (public fields only), Goldback rate
+  // Public home data: live surveys, recent winners (public fields only), Gold Note rate
   r.get('/api/public', async (req, res) => {
     const surveys = all("SELECT * FROM surveys WHERE status = 'live' ORDER BY created_at DESC").map(rowSurvey).filter(isLive).map(s => publicSurvey(s));
     const t = today();

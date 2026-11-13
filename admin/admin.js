@@ -34,7 +34,7 @@ function wonLast12(pid, asOfDay, exceptId) {
   return winners().filter(w => w.participantId === pid && w.id !== exceptId && wStatus(w) !== 'forfeited' && (w.date || '') > from && (w.date || '') <= asOf).reduce((a, w) => a + wVal(w), 0);
 }
 function goldTotal() { return winners().filter(w => wStatus(w) !== 'forfeited').reduce((s, w) => s + gbOf(w), 0); }
-const goldTotalText = () => { const n = goldTotal(); return `${fmtNum(n)} Goldback${n === 1 ? '' : 's'} (${fmtNum((n * GB_OZ).toFixed(3))} oz · ${fmtNum((n * GB_OZ * G_PER_OZ).toFixed(2))} g)`; };
+const goldTotalText = () => { const n = goldTotal(); return `${fmtNum((n * GB_OZ).toFixed(3))} oz of gold (${fmtNum((n * GB_OZ * G_PER_OZ).toFixed(2))} g)`; };
 const drawDateOf = s => s.drawDate || s.endsAt || '';
 
 /* ---------- API ---------- */
@@ -85,7 +85,7 @@ function goldFields(x,attr){
   const px={noteDenom:denom,noteQty:qty,goldbacks:denom*qty,goldUnit:unit};
   const rate=x.gbRate||(gbRate()||{}).rate;const v=estValue(px,rate);
   return `<div class="grid2" style="grid-template-columns:1.6fr .8fr 1fr">
-    <div><label class="f">Goldback note</label><select class="in" ${a('noteDenom')} data-gprev="1">${opts.map(c=>`<option value="${c.n}" ${c.n===denom?'selected':''}>${fmtNum(c.n)} Goldback (${c.l} oz)</option>`).join('')}</select></div>
+    <div><label class="f">Gold Note</label><select class="in" ${a('noteDenom')} data-gprev="1">${opts.map(c=>`<option value="${c.n}" ${c.n===denom?'selected':''}>${c.l} oz Gold Note</option>`).join('')}</select></div>
     <div><label class="f">Notes each</label><input class="in" type="number" min="1" max="50" step="1" ${a('noteQty')} value="${qty}" data-gprev="1"></div>
     <div><label class="f">Show gold in</label><select class="in" ${a('goldUnit')} data-gprev="1"><option value="oz" ${unit==='oz'?'selected':''}>oz</option><option value="g" ${unit==='g'?'selected':''}>grams</option></select></div></div>
     <div class="faint tiny" style="margin-top:6px">Prize${attr==='name'?'':' per winner'}: <b class="gprev">${esc(prizeLabel(px))}</b> <span class="gconv">${esc(goldConv(px.goldbacks,unit))}</span> <span class="gval goldtext" style="font-weight:800">${v?'· est. value '+fmtUSD(v):''}</span></div>`;
@@ -127,11 +127,11 @@ function viewAdmin(){
 function goldPriceCard(){
   const g=gbRate();
   return `<form id="priceForm" class="card" style="margin-bottom:16px">
-    <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h3 style="margin:0">Goldback exchange rate</h3>
-    <div class="faint small" style="margin-top:4px">Used for each prize's estimated value. Goldback publishes the official rate daily at 10 AM MST on <a href="https://www.goldback.com" target="_blank" rel="noopener">goldback.com</a> — update it here on each drawing day.</div></div>
-    ${g?`<span class="chip ok">${fmtUSD(g.rate)} per Goldback · updated ${fmtDT(g.updatedAt)}</span>`:'<span class="chip warn">Not set — estimates are hidden</span>'}</div>
-    <div class="toolbar" style="margin:12px 0 0"><span style="font-weight:800">$</span><input class="in" name="price" type="number" min="0" step="0.01" placeholder="Rate for 1 Goldback (USD)" value="${g?esc(g.rate):''}" style="max-width:220px"><span class="muted small">per 1 Goldback</span><button class="btn gold sm" type="submit">Save rate</button></div>
-    ${g?`<div class="faint tiny" style="margin-top:8px">${GB_CHOICES.map(c=>`${c.n} Goldback = ${fmtUSD(c.n*g.rate)}`).join(' · ')}</div>`:''}
+    <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h3 style="margin:0">Gold Note exchange rate</h3>
+    <div class="faint small" style="margin-top:4px">Used for each prize's estimated value. Enter the official rate for a 1/1000 oz Gold Note from the issuer's website (updated daily at 10 AM MST), and update it on each drawing day.</div></div>
+    ${g?`<span class="chip ok">${fmtUSD(g.rate)} per 1/1000 oz · updated ${fmtDT(g.updatedAt)}</span>`:'<span class="chip warn">Not set — estimates are hidden</span>'}</div>
+    <div class="toolbar" style="margin:12px 0 0"><span style="font-weight:800">$</span><input class="in" name="price" type="number" min="0" step="0.01" placeholder="Rate for 1/1000 oz (USD)" value="${g?esc(g.rate):''}" style="max-width:220px"><span class="muted small">per 1/1000 oz Gold Note</span><button class="btn gold sm" type="submit">Save rate</button></div>
+    ${g?`<div class="faint tiny" style="margin-top:8px">${GB_CHOICES.map(c=>`${c.l} oz = ${fmtUSD(c.n*g.rate)}`).join(' · ')}</div>`:''}
   </form>`;
 }
 function adOverview(){
@@ -186,7 +186,7 @@ function adBuild(){
       <div class="grid2" style="grid-template-columns:1fr 2fr"><div><label class="f">Number of winners</label><input class="in" type="number" min="1" max="500" step="1" data-ef="winnersCount" value="${winnersCountOf(s)}"></div><div class="faint small" style="align-self:end;padding-bottom:10px">Each winner gets the prize below. Smaller prizes for more winners keeps people under the $${WIN_CAP} / 12-month limit.</div></div>
       ${goldFields(s,'ef')}
       <div class="small" id="poolLine" style="margin-top:8px"></div>
-      ${gbRate()?'':`<div class="note" style="margin-top:8px">Set the Goldback exchange rate on the Overview tab to show an estimated value to participants.</div>`}
+      ${gbRate()?'':`<div class="note" style="margin-top:8px">Set the Gold Note exchange rate on the Overview tab to show an estimated value to participants.</div>`}
       ${gbRate()&&estValue(s,gbRate().rate)>WIN_CAP?`<div class="err">At today's rate this prize is worth ${fmtUSD(estValue(s,gbRate().rate))}, over the $${WIN_CAP} a person can win in 12 months. It can't be drawn.</div>`:''}
       <div class="grid2"><div><label class="f">End date (last day to enter)</label><input class="in" type="date" data-ef="endsAt" value="${esc(s.endsAt||'')}"></div>
       <div><label class="f">Drawing date</label><input class="in" type="date" data-ef="drawDate" value="${esc(s.drawDate||'')}"></div></div>
@@ -311,7 +311,7 @@ function adCampaigns(){
   const d=S.camp||(S.camp={title:'New survey — win gold!',message:'',surveyId:(liveSurveys()[0]||{}).id||'',email:true,sms:true,onlyNew:true});
   const s=S.data.surveys[d.surveyId];
   const aud=audience(d);
-  const msg=d.message||(s?`A new Golden Opinions survey is live: "${s.title}". Answer a few questions for a chance to win ${prizeLabel(s)||'gold'}!`:'');
+  const msg=d.message||(s?`A new Golden Opinions survey is live: "${s.title}". Answer a few questions for a chance to win ${sh.prizePhrase(s,'en')||'gold'}!`:'');
   const hist=vals(S.data.campaigns).sort((a,b)=>b.sentAt-a.sentAt);
   return `<div class="split"><div class="card">
     <h3>Announce a new campaign</h3><p class="muted small" style="margin-top:0">Sends to participants who opted in to alerts. Recipients also see it in their in-app Messages.</p>
@@ -355,7 +355,7 @@ function adWinners(){
   <div class="card tscroll"><table class="t"><tr><th>Drawn</th><th>Winner</th><th>Prize</th><th>Status</th><th></th></tr>
   ${list.map(w=>`<tr><td class="small">${dayFmt(w.date)}</td>
     <td><b>${esc(winnerLabel(w))}</b><div class="small">${esc(w.fullName||'')}</div>${w.contact?`<div class="faint tiny">${esc(w.contact)}</div>`:''}<div class="faint tiny">${esc((S.data.surveys[w.surveyId]||{}).title||'')}</div>${w.participantId?`<div class="faint tiny">12-month total: ${fmtUSD(wonLast12(w.participantId))} of $${WIN_CAP}</div>`:''}</td>
-    <td>${esc(shortPrize(w))}${w.estValue?`<div class="faint tiny">est. ${fmtUSD(w.estValue)}${w.gbRate?` at ${fmtUSD(w.gbRate)}/GB`:''}</div>`:''}</td>
+    <td>${esc(shortPrize(w))}${w.estValue?`<div class="faint tiny">est. ${fmtUSD(w.estValue)}${w.gbRate?` at ${fmtUSD(w.gbRate)} per 1/1000 oz`:''}</div>`:''}</td>
     <td>${statusChipW(w)}<div class="faint tiny" style="margin-top:6px;line-height:1.5">${detail(w)}</div></td>
     <td style="white-space:nowrap;text-align:right">${action(w)} <button class="btn sm ghost" data-act="editWinner" data-id="${esc(w.id)}">Edit</button></td></tr>`).join('')||'<tr><td colspan="5" class="muted">No winners here yet. Draw one from a survey report.</td></tr>'}
   </table></div>
@@ -371,7 +371,7 @@ function winnerForm(w){
   <div class="goldcard" style="margin-top:12px;padding:10px 14px"><div class="muted tiny" style="font-weight:700">Shown publicly as</div><div id="wprev" style="font-weight:900;font-size:18px">${esc(winnerLabel({firstName:w.firstName||'—',lastInitial:w.lastInitial,state:w.state}))}</div></div>
   ${goldFields(w,'name')}
   <div class="grid2"><div><label class="f">Drawing date</label><input class="in" name="date" type="date" value="${esc(w.date||new Date().toISOString().slice(0,10))}"></div>
-  <div><label class="f">Goldback rate that day ($ per Goldback)</label><input class="in" name="gbRate" type="number" min="0" step="0.01" value="${esc(w.gbRate||(gbRate()||{}).rate||'')}" placeholder="from goldback.com" data-gprev="1"></div></div>
+  <div><label class="f">Gold Note rate that day ($ per 1/1000 oz)</label><input class="in" name="gbRate" type="number" min="0" step="0.01" value="${esc(w.gbRate||(gbRate()||{}).rate||'')}" placeholder="from the issuer's website" data-gprev="1"></div></div>
   ${w.participantId&&(!S.data.winners[w.id]||wStatus(w)==='notified')?`<label class="f">Claim deadline</label><input class="in" name="claimDeadline" type="date" value="${esc(w.claimDeadline||addDays(localDay(),CLAIM_DAYS))}">`:''}
   <div style="display:flex;gap:10px;margin-top:18px">${S.data.winners[w.id]?'<button type="button" class="btn danger" data-act="delWinner">Delete</button>':''}<span style="flex:1"></span><button type="button" class="btn" data-act="closemodal">Cancel</button><button class="btn gold" type="submit">Save</button></div></form>`;
 }
@@ -390,7 +390,7 @@ function adParticipants(){
 function sampleSurvey(){
   const Q=(t,o)=>Object.assign(newQuestion(t),o);
   const end=new Date(Date.now()+30*864e5).toISOString().slice(0,10);
-  return {id:'s'+uid(),title:'Everyday Shopping Habits',title_es:'Hábitos de compra diarios',description:'Tell us how you shop for groceries and household items. Takes about 3 minutes.',description_es:'Cuéntanos cómo compras alimentos y artículos para el hogar. Toma unos 3 minutos.',winnersCount:10,noteDenom:10,noteQty:1,goldbacks:10,goldAmt:0.01,goldUnit:'oz',prize:'10 Goldback note (1/100 oz gold)',endsAt:end,status:'live',createdAt:Date.now(),questions:[
+  return {id:'s'+uid(),title:'Everyday Shopping Habits',title_es:'Hábitos de compra diarios',description:'Tell us how you shop for groceries and household items. Takes about 3 minutes.',description_es:'Cuéntanos cómo compras alimentos y artículos para el hogar. Toma unos 3 minutos.',winnersCount:10,noteDenom:10,noteQty:1,goldbacks:10,goldAmt:0.01,goldUnit:'oz',prize:'1/100 oz Gold Note',endsAt:end,status:'live',createdAt:Date.now(),questions:[
     Q('single',{text:'Where do you do most of your grocery shopping?',text_es:'¿Dónde haces la mayoría de tus compras de alimentos?',options:['Supermarket','Warehouse club','Discount store','Online delivery','Farmers market'],options_es:['Supermercado','Club de almacén','Tienda de descuento','Entrega en línea','Mercado de agricultores']}),
     Q('multi',{text:'Which of these did you buy online in the last month?',text_es:'¿Cuáles de estos compraste en línea el último mes?',options:['Groceries','Household supplies','Clothing','Electronics','Personal care','Pet supplies'],options_es:['Alimentos','Artículos para el hogar','Ropa','Electrónicos','Cuidado personal','Artículos para mascotas'],max:3}),
     Q('dropdown',{text:'Which state do you live in?',text_es:'¿En qué estado vives?',options:[...STATES]}),
@@ -443,7 +443,7 @@ const ACT = {
       <p class="muted small">Winners are picked at random on the server from eligible entries in "${esc(s.title)}". Anyone the prize would put over the $${WIN_CAP} / 12-month limit is skipped. Each winner is notified by text and email right away.</p></div>
       <form id="drawForm" data-count="${count}"><div class="faint small">Each wins <b>${esc(prizeLabel(s))}</b></div>
         <div class="grid2"><div><label class="f">Drawing date</label><input class="in" name="date" type="date" value="${S.today}"></div><div><label class="f">Claim deadline</label><input class="in" name="claimDeadline" type="date" value="${addDays(S.today, CLAIM_DAYS)}"></div></div>
-        <label class="f">Goldback rate on drawing day ($ per Goldback)</label><input class="in" name="gbRate" type="number" min="0" step="0.01" value="${esc(rate)}" placeholder="from goldback.com">
+        <label class="f">Gold Note rate on drawing day ($ per 1/1000 oz)</label><input class="in" name="gbRate" type="number" min="0" step="0.01" value="${esc(rate)}" placeholder="from the issuer's website">
         <div style="display:flex;gap:10px;margin-top:16px"><span style="flex:1"></span><button type="button" class="btn" data-act="closemodal">Cancel</button><button class="btn gold" type="submit">Draw &amp; notify</button></div></form>`);
   },
   wfilter(t) { S.wf = t.dataset.k; render(); },
@@ -515,7 +515,7 @@ document.addEventListener('submit', async e => {
   }
   if (f.id === 'priceForm') {
     const v = Number(new FormData(f).get('price'));
-    await busy(async () => { await api('PUT', '/api/admin/settings/goldback', { rate: v }); await refresh(); toast('Goldback rate saved — estimates updated'); });
+    await busy(async () => { await api('PUT', '/api/admin/settings/goldback', { rate: v }); await refresh(); toast('Gold Note rate saved — estimates updated'); });
     return;
   }
   if (f.id === 'drawForm') {
