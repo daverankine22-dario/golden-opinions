@@ -3,7 +3,7 @@
 Take surveys, win gold. A mobile web app for participants, an admin console for your team, and the server behind both.
 
 - **Participant app** (`/`): create account / log in with a 6-digit code by text and email, account recovery, English/Español, pick a survey, all 8 answer types, save a draft, review, submit, confirmations, messages, settings, recent winners, claim a prize.
-- **Admin console** (`/admin`, optionally only on `admin.yourdomain.com`): staff log-in (password + emailed code), survey builder with Spanish translations and phone preview, searchable reports with charts and CSV download, Gold Note exchange rate, random server-side draws for many winners, winner notices, reminders, claims, shipping, campaigns, participants.
+- **Admin console** (`/admin`, optionally only on `admin.yourdomain.com`): staff log-in (password + emailed code), survey builder with Spanish translations and phone preview, searchable reports with charts and CSV download, prizes by place (1st/2nd/3rd: winners × Gold Notes, shown to participants as ounces of gold, never dollars), Gold Note size and internal rate, random server-side draws by place, winner notices, reminders, claims, shipping, campaigns, participants.
 - **Rules enforced on the server**: one entry per survey per email and per phone (also enforced by the database), $999 maximum winnings per person in any 12 months, random draws using a cryptographic shuffle with an audit log, log-in codes that expire after 10 minutes and lock after 5 wrong tries, rate limits.
 
 ## Tech
@@ -43,7 +43,7 @@ See **SETUP.md** for the full launch checklist (hosting, domain, texting registr
 
 Participant: `GET /api/public`, `POST /api/auth/start|verify|resend|logout`, `POST /api/auth/recover/start|verify`, `GET /api/me`, `PUT /api/me/profile|prefs`, `POST /api/me/contact/start|verify`, `DELETE /api/me`, `GET /api/surveys/:id`, `PUT /api/surveys/:id/draft`, `POST /api/surveys/:id/submit`, `POST /api/wins/:id/claim`, `GET /u/:token` (email unsubscribe).
 
-Admin: `POST /api/admin/login|verify|logout`, `GET /api/admin/me|data|outbox|audit`, `PUT|DELETE /api/admin/surveys/:id`, `GET /api/admin/surveys/:id/export.csv`, `POST /api/admin/surveys/:id/draw`, `PUT /api/admin/settings/goldback`, `POST /api/admin/winners`, `PUT|DELETE /api/admin/winners/:id`, `POST /api/admin/winners/:id/remind|ship|forfeit`, `POST /api/admin/campaigns`.
+Admin: `POST /api/admin/login|verify|logout`, `GET /api/admin/me|data|outbox|audit`, `PUT|DELETE /api/admin/surveys/:id`, `GET /api/admin/surveys/:id/export.csv`, `POST /api/admin/surveys/:id/draw`, `PUT /api/admin/settings/note|goldback`, `POST /api/admin/winners`, `PUT|DELETE /api/admin/winners/:id`, `POST /api/admin/winners/:id/remind|ship|forfeit`, `POST /api/admin/campaigns`.
 
 Webhook: `POST /api/webhooks/twilio` (STOP/START replies; signature-checked).
 
@@ -53,5 +53,6 @@ All state-changing requests must send `X-Requested-With: fetch` (CSRF guard). Se
 
 - **Scale**: `/api/admin/data` loads everything for the console — add paging when you pass ~50,000 responses.
 - **Postgres**: SQL lives in `src/db.js`, `src/participant.js` and `src/admin.js`; moving to Postgres means swapping the driver and placeholders.
-- **Gold Note rate**: entered by staff today (per 1/1000 oz). If the issuer provides a data feed, fetch it in the background job in `src/server.js`. Internally, prize sizes are stored as 1/1000 oz units in the `goldbacks` field.
+- **Prizes**: each survey stores `tiers` (`[{place, winners, notes}]`) and `noteOz` (gold per Gold Note, default from the Overview setting, e.g. 0.001 oz). Participants only ever see gold amounts ("10 Gold Notes (0.01 oz of gold)").
+- **Internal Gold Note rate** ($ per note): entered by staff on drawing day, never shown to participants. Used for the $999 / 12-month limit, the $5,000 per-survey cap and each winner's recorded value (for ARV and tax records).
 - **Legal text**: Terms, Privacy and Official Rules in `public/js/app.js` (`viewLegal`) are templates — replace with your attorney's final versions and a professional Spanish translation.

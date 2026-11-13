@@ -26,47 +26,56 @@ export const LIKERT_ES = {
 };
 
 /* ---------- prizes: Gold Notes ----------
-   Prizes are Gold Notes containing 24K gold. The smallest note holds 1/1000 troy oz; internally, prize sizes are
-   counted in those 1/1000 oz units (the `goldbacks` field). Value = units × the official Gold Note exchange rate
-   per 1/1000 oz, published daily by the issuer (10 AM MST). */
+   Each survey awards up to three places (1st, 2nd, 3rd). For each place the admin sets the number of winners and
+   the number of Gold Notes each winner receives. Each Gold Note holds a set amount of gold (noteOz, e.g. 0.001 oz).
+   Participants only ever see gold amounts. A dollar value (notes × the admin's internal Gold Note rate) is kept
+   only for the $999 winning limit, the $5,000 prize-pool cap and prize records. */
 export const G_PER_OZ = 31.1035;
-export const GB_OZ = 0.001;
-export const GB_CHOICES = [{ n: 1, l: '1/1000' }, { n: 2, l: '1/500' }, { n: 5, l: '1/200' }, { n: 10, l: '1/100' }];
+export const DEFAULT_NOTE_OZ = 0.001;
+export const PLACES = [1, 2, 3];
 /* Winning limit: no person may win more than this (est. value on drawing day) in any 12 consecutive months.
    Keeps every winner under the IRS Form 1099-MISC prize threshold ($2,000 per calendar year from 2026). */
 export const WIN_CAP = 999;
+export const POOL_CAP = 5000; // total prize value per survey (New York / Florida registration threshold)
 export const CLAIM_DAYS = 14;
 
-export const fmtNum = n => String(+Number(n).toFixed(4));
-export const gbOf = x => x && x.goldbacks > 0 ? +x.goldbacks : 0;
-export const noteParts = x => {
-  const qty = Math.max(1, parseInt(x.noteQty) || 1);
-  const denom = x.noteDenom > 0 ? +x.noteDenom : gbOf(x) / qty;
-  return { qty, denom };
-};
-export const ozFrac = n => { const c = GB_CHOICES.find(c => c.n === n); if (c) return c.l; const d = 1000 / n; return Number.isInteger(d) ? '1/' + d : fmtNum(n * GB_OZ); };
-export const gramsOf = n => n * GB_OZ * G_PER_OZ;
-export const goldText = (n, unit) => unit === 'g' ? `${fmtNum(gramsOf(n).toFixed(3))} g` : `${ozFrac(n)} oz`;
-export const goldConv = (n, unit) => n > 0 ? '= ' + goldText(n, unit === 'g' ? 'oz' : 'g') : '';
-export function prizeLabel(x, lang = 'en') {
-  const n = gbOf(x); if (!n) return x.prize || '';
-  const { qty, denom } = noteParts(x); const g = goldText(n, x.goldUnit);
-  const dl = goldText(denom, x.goldUnit);
-  if (lang === 'es') return qty > 1 ? `${qty} Gold Notes de ${dl} (${g} de oro en total)` : `Gold Note de ${g}`;
-  return qty > 1 ? `${qty} × ${dl} Gold Notes (${g} gold in total)` : `${g} Gold Note`;
+export const fmtNum = n => String(+Number(n).toFixed(6));
+export const fmtOz = n => `${fmtNum(n)} oz`;
+export const placeLabel = (p, lang = 'en') => lang === 'es'
+  ? ({ 1: '1.er lugar', 2: '2.º lugar', 3: '3.er lugar' }[p] || `${p}.º lugar`)
+  : ({ 1: '1st place', 2: '2nd place', 3: '3rd place' }[p] || `Place ${p}`);
+export const noteOzOf = x => x && Number(x.noteOz) > 0 ? +x.noteOz : DEFAULT_NOTE_OZ;
+export const notesText = n => `${n} Gold Note${+n === 1 ? '' : 's'}`;
+export const goldOzOf = (notes, noteOz) => +(notes * noteOz).toFixed(6);
+/* a survey's prize places, cleaned and in order (older single-prize surveys become one 1st-place tier) */
+export function tiersOf(s) {
+  if (s && Array.isArray(s.tiers)) return s.tiers
+    .map(t => ({ place: +t.place, winners: Math.max(0, parseInt(t.winners) || 0), notes: Math.max(0, parseInt(t.notes) || 0) }))
+    .filter(t => PLACES.includes(t.place) && t.winners > 0 && t.notes > 0).sort((a, b) => a.place - b.place);
+  const n = s && s.goldbacks > 0 ? +s.goldbacks : 0;
+  return n ? [{ place: 1, winners: Math.max(1, parseInt(s.winnersCount) || 1), notes: n }] : [];
 }
-// prize with an article, for sentences: "a 1/100 oz Gold Note" / "una Gold Note de 1/100 oz" / "2 × 1/100 oz Gold Notes"
-export function prizePhrase(x, lang = 'en') {
-  const label = prizeLabel(x, lang); if (!gbOf(x) || noteParts(x).qty > 1) return label;
-  return (lang === 'es' ? 'una ' : 'a ') + label;
+export const winnersCountOf = s => tiersOf(s).reduce((a, t) => a + t.winners, 0);
+export const totalNotesOf = s => tiersOf(s).reduce((a, t) => a + t.winners * t.notes, 0);
+export const topGoldOz = s => { const ts = tiersOf(s); return ts.length ? goldOzOf(Math.max(...ts.map(t => t.notes)), noteOzOf(s)) : 0; };
+export function tierPrize(t, noteOz, lang = 'en') {
+  const oz = fmtOz(goldOzOf(t.notes, noteOz));
+  return lang === 'es' ? `${notesText(t.notes)} (${oz} de oro)` : `${notesText(t.notes)} (${oz} of gold)`;
 }
-export function shortPrize(x) {
-  const n = gbOf(x); if (!n) return x.prize || 'Gold';
-  const { qty, denom } = noteParts(x);
-  return qty > 1 ? `${qty}×${goldText(denom, x.goldUnit)} Gold Notes` : `${goldText(n, x.goldUnit)} Gold Note`;
+/* one-line summary of a survey's prizes: "26 winners · up to 0.01 oz of gold" */
+export function surveyPrizeShort(s, lang = 'en') {
+  const n = winnersCountOf(s); const top = fmtOz(topGoldOz(s));
+  if (lang === 'es') return n === 1 ? `1 ganador · ${top} de oro` : `${n} ganadores · hasta ${top} de oro`;
+  return n === 1 ? `1 winner · ${top} of gold` : `${n} winners · up to ${top} of gold`;
 }
-export const estValue = (x, rate) => { const n = gbOf(x); return n && rate > 0 ? +(n * rate).toFixed(2) : 0; };
-export const winnersCountOf = s => Math.max(1, parseInt(s.winnersCount) || 1);
+/* a winner's prize */
+export const notesOf = w => w && w.notes > 0 ? +w.notes : (w && w.goldbacks > 0 ? +w.goldbacks : 0);
+export const winnerGoldOz = w => goldOzOf(notesOf(w), noteOzOf(w));
+export function prizeLabel(w, lang = 'en') { const n = notesOf(w); return n ? tierPrize({ notes: n }, noteOzOf(w), lang) : (w.prize || ''); }
+export const shortPrize = (w, lang = 'en') => `${fmtOz(winnerGoldOz(w))} ${lang === 'es' ? 'de oro' : 'of gold'}`;
+/* internal dollar value: notes × rate per Gold Note (admin only — never shown to participants) */
+export const estValue = (x, rate) => { const n = typeof x === 'number' ? x : notesOf(x); return n > 0 && rate > 0 ? +(n * rate).toFixed(2) : 0; };
+export const poolValue = (s, rate) => estValue(totalNotesOf(s), rate);
 export const fmtUSD = n => '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 /* ---------- people ---------- */
@@ -176,7 +185,8 @@ export function surveyProblems(s) {
     if (q.type === 'matrix' && !(q.rows || []).length) errs.push(`Question ${i + 1} needs at least 1 row.`);
     if (q.type === 'slider' && !(+q.max > +q.min)) errs.push(`Question ${i + 1}: max must be greater than min.`);
   });
-  if (!(gbOf(s) > 0)) errs.push("Choose the Gold Note for this survey's prize.");
+  if (!tiersOf(s).length) errs.push('Add at least one prize place with a number of winners and Gold Notes.');
+  if (!(Number(s.noteOz) > 0 && Number(s.noteOz) <= 10)) errs.push('Enter how much gold is in each Gold Note (oz).');
   if (s.drawDate && s.endsAt && s.drawDate < s.endsAt) errs.push('The drawing date should be on or after the end date.');
   return errs;
 }

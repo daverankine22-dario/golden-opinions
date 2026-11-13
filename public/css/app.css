@@ -170,3 +170,5 @@ body.busy{cursor:progress}
 body.busy .btn{pointer-events:none;opacity:.75}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 
+.tiers{margin-top:10px;display:grid;gap:4px;font-size:13.5px}
+.tiers .tier{line-height:1.35}

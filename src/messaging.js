@@ -3,7 +3,6 @@
 import { createHmac } from 'node:crypto';
 import { config } from './config.js';
 import { all, run } from './db.js';
-import { fmtUSD } from '../public/js/shared.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -96,30 +95,30 @@ export const T = {
       html: c => emailHtml(lang, lang === 'es' ? `<p>Tu código es:</p><p style="font-size:30px;font-weight:900;letter-spacing:6px">${code}</p><p>Vence en 10 minutos. Si no lo pediste, ignora este correo.</p>` : `<p>Your code is:</p><p style="font-size:30px;font-weight:900;letter-spacing:6px">${code}</p><p>It expires in 10 minutes. If you didn't ask for it, ignore this email.</p>`),
     };
   },
-  confirm(lang, { firstName, title, entryNo, prize, est, drawDate }) {
+  confirm(lang, { firstName, title, entryNo, prize, drawDate }) {
     const es = lang === 'es';
     return {
       sms: es ? `${brand}: ¡Ya estás participando! Gracias por completar "${title}". Participación #${entryNo}. Notificamos directamente a los ganadores. Responde STOP para cancelar.`
               : `${brand}: You're entered! Thanks for completing "${title}". Entry #${entryNo}. Winners are notified directly. Reply STOP to opt out.`,
       subject: es ? 'Ya participas para ganar oro 🏆' : "You're entered to win gold 🏆",
-      text: es ? `Hola ${firstName},\n\nGracias por compartir tu opinión en "${title}". Tu número de participación es #${entryNo}.${prize ? `\nPremio: ${prize}${est ? ` — valor est. ${fmtUSD(est)} el día del sorteo` : ''}${drawDate ? `, ${drawDate}` : ''}.` : ''}\n\nContactaremos a los ganadores directamente. No se requiere compra.`
-               : `Hi ${firstName},\n\nThanks for sharing your opinion in "${title}". Your entry number is #${entryNo}.${prize ? `\nPrize: ${prize}${est ? ` — est. value ${fmtUSD(est)} on drawing day` : ''}${drawDate ? `, ${drawDate}` : ''}.` : ''}\n\nWe'll contact winners directly. No purchase necessary.`,
+      text: es ? `Hola ${firstName},\n\nGracias por compartir tu opinión en "${title}". Tu número de participación es #${entryNo}.${prize ? `\nPremios: ${prize}${drawDate ? `. Sorteo: ${drawDate}` : ''}.` : ''}\n\nContactaremos a los ganadores directamente. No se requiere compra.`
+               : `Hi ${firstName},\n\nThanks for sharing your opinion in "${title}". Your entry number is #${entryNo}.${prize ? `\nPrizes: ${prize}${drawDate ? `. Drawing: ${drawDate}` : ''}.` : ''}\n\nWe'll contact winners directly. No purchase necessary.`,
       html: () => emailHtml(lang, es
-        ? `<p>Hola ${esc(firstName)},</p><p>Gracias por compartir tu opinión en <b>${esc(title)}</b>. Tu número de participación es <b>#${esc(entryNo)}</b>.</p>${prize ? `<p>Premio: <b>${esc(prize)}</b>${est ? ` — valor est. ${fmtUSD(est)} el día del sorteo` : ''}${drawDate ? `, ${esc(drawDate)}` : ''}.</p>` : ''}<p>Contactaremos a los ganadores directamente por teléfono o correo. No se requiere compra.</p>`
-        : `<p>Hi ${esc(firstName)},</p><p>Thanks for sharing your opinion in <b>${esc(title)}</b>. Your entry number is <b>#${esc(entryNo)}</b>.</p>${prize ? `<p>Prize: <b>${esc(prize)}</b>${est ? ` — est. value ${fmtUSD(est)} on drawing day` : ''}${drawDate ? `, ${esc(drawDate)}` : ''}.</p>` : ''}<p>We'll contact winners directly by phone or email. No purchase necessary.</p>`),
+        ? `<p>Hola ${esc(firstName)},</p><p>Gracias por compartir tu opinión en <b>${esc(title)}</b>. Tu número de participación es <b>#${esc(entryNo)}</b>.</p>${prize ? `<p>Premios: <b>${esc(prize)}</b>${drawDate ? `. Sorteo: ${esc(drawDate)}` : ''}.</p>` : ''}<p>Contactaremos a los ganadores directamente por teléfono o correo. No se requiere compra.</p>`
+        : `<p>Hi ${esc(firstName)},</p><p>Thanks for sharing your opinion in <b>${esc(title)}</b>. Your entry number is <b>#${esc(entryNo)}</b>.</p>${prize ? `<p>Prizes: <b>${esc(prize)}</b>${drawDate ? `. Drawing: ${esc(drawDate)}` : ''}.</p>` : ''}<p>We'll contact winners directly by phone or email. No purchase necessary.</p>`),
     };
   },
-  win(lang, { firstName, title, prize, est, deadline }) {
+  win(lang, { firstName, title, prize, place, deadline }) {
     const es = lang === 'es'; const url = config.publicUrl;
     return {
-      sms: es ? `${brand}: ¡Felicidades ${firstName}! Ganaste el sorteo "${title}" (${prize}). Inicia sesión en ${url} para reclamarlo antes del ${deadline}. Nunca te pediremos pagos ni datos bancarios.`
-              : `${brand}: Congratulations ${firstName}! You won the "${title}" draw (${prize}). Log in at ${url} to claim by ${deadline}. We'll never ask for payment or bank details.`,
-      subject: es ? `🎉 ¡Ganaste ${prize}!` : `🎉 You won ${prize}!`,
-      text: es ? `Hola ${firstName},\n\n¡Felicidades! Ganaste el sorteo "${title}". Tu premio: ${prize}${est ? ` (valor est. ${fmtUSD(est)})` : ''}.\n\nPara reclamarlo, inicia sesión en ${url} y toca "Reclamar mi premio" antes del ${deadline}.\n\nPor tu seguridad: nunca te pediremos pagos, costos de envío, tarjetas de regalo ni datos bancarios.`
-               : `Hi ${firstName},\n\nCongratulations — you're the winner of the "${title}" draw! Your prize: ${prize}${est ? ` (est. value ${fmtUSD(est)})` : ''}.\n\nTo claim it, log in at ${url} and tap "Claim my prize" by ${deadline}.\n\nFor your security: we will never ask for payment, shipping fees, gift cards or bank details.`,
+      sms: es ? `${brand}: ¡Felicidades ${firstName}! Ganaste el ${place} del sorteo "${title}": ${prize}. Inicia sesión en ${url} para reclamarlo antes del ${deadline}. Nunca te pediremos pagos ni datos bancarios.`
+              : `${brand}: Congratulations ${firstName}! You won ${place} in the "${title}" draw: ${prize}. Log in at ${url} to claim by ${deadline}. We'll never ask for payment or bank details.`,
+      subject: es ? `🎉 ¡Ganaste oro en Golden Opinions!` : `🎉 You won gold with Golden Opinions!`,
+      text: es ? `Hola ${firstName},\n\n¡Felicidades! Ganaste el ${place} del sorteo "${title}". Tu premio: ${prize}.\n\nPara reclamarlo, inicia sesión en ${url} y toca "Reclamar mi premio" antes del ${deadline}.\n\nPor tu seguridad: nunca te pediremos pagos, costos de envío, tarjetas de regalo ni datos bancarios.`
+               : `Hi ${firstName},\n\nCongratulations — you won ${place} in the "${title}" draw! Your prize: ${prize}.\n\nTo claim it, log in at ${url} and tap "Claim my prize" by ${deadline}.\n\nFor your security: we will never ask for payment, shipping fees, gift cards or bank details.`,
       html: () => emailHtml(lang, es
-        ? `<p>Hola ${esc(firstName)},</p><p>¡Felicidades! Ganaste el sorteo <b>${esc(title)}</b>. Tu premio: <b>${esc(prize)}</b>${est ? ` (valor est. ${fmtUSD(est)})` : ''}.</p><p>Reclámalo antes del <b>${esc(deadline)}</b>.</p>${button(url, 'Reclamar mi premio')}`
-        : `<p>Hi ${esc(firstName)},</p><p>Congratulations — you're the winner of the <b>${esc(title)}</b> draw! Your prize: <b>${esc(prize)}</b>${est ? ` (est. value ${fmtUSD(est)})` : ''}.</p><p>Claim it by <b>${esc(deadline)}</b>.</p>${button(url, 'Claim my prize')}`),
+        ? `<p>Hola ${esc(firstName)},</p><p>¡Felicidades! Ganaste el <b>${esc(place)}</b> del sorteo <b>${esc(title)}</b>. Tu premio: <b>${esc(prize)}</b>.</p><p>Reclámalo antes del <b>${esc(deadline)}</b>.</p>${button(url, 'Reclamar mi premio')}`
+        : `<p>Hi ${esc(firstName)},</p><p>Congratulations — you won <b>${esc(place)}</b> in the <b>${esc(title)}</b> draw! Your prize: <b>${esc(prize)}</b>.</p><p>Claim it by <b>${esc(deadline)}</b>.</p>${button(url, 'Claim my prize')}`),
     };
   },
   reminder(lang, { firstName, prize, deadline }) {

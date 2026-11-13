@@ -4,7 +4,7 @@ import { config } from './config.js';
 import { all, get, run, tx, rowParticipant, rowSurvey, rowResponse, rowWinner, saveSurvey, saveWinner, getSetting, setSetting, audit, parse } from './db.js';
 import { HttpError, bad, newId, sha256, sixDigits, jsonBody, sendJson, createSession, readSession, endSession, rateLimit, clientIp, checkPassword, safeEqual } from './http.js';
 import { T as MSG, queueEmail, queueSms, sendBoth } from './messaging.js';
-import { WIN_CAP, CLAIM_DAYS, STATES, localDay, addDays, wStatus, surveyProblems, estValue, prizeLabel, prizePhrase, shortPrize, gbOf, noteParts, GB_OZ, winnersCountOf, fmtPhone, answerText, L } from '../public/js/shared.js';
+import { WIN_CAP, CLAIM_DAYS, STATES, localDay, addDays, wStatus, surveyProblems, estValue, prizeLabel, shortPrize, winnersCountOf, fmtPhone, answerText, L, tiersOf, noteOzOf, notesOf, goldOzOf, placeLabel, PLACES, DEFAULT_NOTE_OZ, POOL_CAP, poolValue, surveyPrizeShort, fmtOz, topGoldOz } from '../public/js/shared.js';
 
 const today = () => localDay(Date.now(), config.timeZone);
 const dayRx = /^\d{4}-\d{2}-\d{2}$/;
@@ -25,17 +25,18 @@ export function wonLast12(pid, asOfDay = today(), exceptId = null) {
   const r = get(`SELECT COALESCE(SUM(est_value), 0) AS total FROM winners WHERE participant_id = ? AND status != 'forfeited' AND draw_date > ? AND draw_date <= ? AND id != ?`, pid, from, asOfDay, exceptId || '');
   return r.total;
 }
-function prizeFields(x) {
-  const qty = Math.max(1, Math.min(50, parseInt(x.noteQty) || 1));
-  const denom = Number(x.noteDenom) || (gbOf(x) / qty) || 0;
-  const n = +(denom * qty).toFixed(3);
-  return { noteDenom: denom, noteQty: qty, goldbacks: n, goldAmt: +(n * GB_OZ).toFixed(6), goldUnit: x.goldUnit === 'g' ? 'g' : 'oz' };
+const noteOzSetting = () => (getSetting('goldnote') || {}).noteOz || DEFAULT_NOTE_OZ;
+// a winner's prize fields, from a place's number of notes and the survey's note size
+function winnerPrize(place, notes, noteOz, rate) {
+  const n = Math.max(1, Math.min(10000, parseInt(notes) || 0)); const oz = Number(noteOz) > 0 ? +noteOz : DEFAULT_NOTE_OZ;
+  const w = { place: PLACES.includes(+place) ? +place : 1, notes: n, noteOz: oz, goldOz: goldOzOf(n, oz), gbRate: +rate || 0, estValue: estValue(n, rate) };
+  w.prize = prizeLabel(w); return w;
 }
 function notifyWinner(w, kind) {
   const p = participantById(w.participantId); if (!p) return;
   const s = surveyById(w.surveyId) || {}; const lang = p.lang === 'es' ? 'es' : 'en';
-  const prize = shortPrize(w); const deadline = fmtDay(w.claimDeadline, lang);
-  const tpl = kind === 'win' ? MSG.win(lang, { firstName: p.firstName, title: L(s, 'title', lang) || '', prize, est: w.estValue, deadline })
+  const prize = prizeLabel(w, lang); const deadline = fmtDay(w.claimDeadline, lang);
+  const tpl = kind === 'win' ? MSG.win(lang, { firstName: p.firstName, title: L(s, 'title', lang) || '', prize, place: placeLabel(w.place || 1, lang), deadline })
     : kind === 'reminder' ? MSG.reminder(lang, { firstName: p.firstName, prize, deadline })
     : MSG.shipped(lang, { firstName: p.firstName, prize, tracking: w.tracking });
   sendBoth(p, tpl, kind, { sms: !p.smsStopped });
@@ -81,7 +82,7 @@ export function adminRoutes(r) {
       responses: all('SELECT * FROM responses').map(rowResponse),
       winners: all('SELECT * FROM winners ORDER BY draw_date DESC, created_at DESC').map(rowWinner),
       campaigns: all('SELECT * FROM campaigns ORDER BY sent_at DESC').map(c => ({ ...parse(c.data), id: c.id, sentAt: c.sent_at })),
-      settings: { goldback: getSetting('goldback') },
+      settings: { goldback: getSetting('goldback'), goldnote: { noteOz: noteOzSetting() } },
       outbox: { queued: get("SELECT COUNT(*) n FROM outbox WHERE status = 'queued'").n, failed: get("SELECT COUNT(*) n FROM outbox WHERE status = 'failed'").n },
       smsEnabled: config.smsEnabled, emailEnabled: config.emailEnabled,
     });
@@ -92,11 +93,14 @@ export function adminRoutes(r) {
     const a = requireAdmin(req); const b = await jsonBody(req); const s = b.survey || {};
     if (!/^[A-Za-z0-9_-]{4,40}$/.test(params.id)) throw bad('Invalid survey id');
     const prev = surveyById(params.id);
-    const clean = { ...s, id: params.id, status: ['draft', 'live', 'closed'].includes(s.status) ? s.status : 'draft', winnersCount: winnersCountOf(s), ...prizeFields(s), createdAt: prev ? prev.createdAt : Date.now() };
-    delete clean.updatedAt;
-    clean.prize = prizeLabel(clean);
+    const tiers = PLACES.map(pl => { const t = (s.tiers || []).find(x => +x.place === pl) || {}; return { place: pl, winners: Math.max(0, Math.min(1000, parseInt(t.winners) || 0)), notes: Math.max(0, Math.min(10000, parseInt(t.notes) || 0)) }; });
+    const clean = { ...s, id: params.id, status: ['draft', 'live', 'closed'].includes(s.status) ? s.status : 'draft', tiers, noteOz: Number(s.noteOz) > 0 ? +Number(s.noteOz).toFixed(6) : noteOzSetting(), createdAt: prev ? prev.createdAt : Date.now() };
+    for (const k of ['updatedAt', 'goldbacks', 'noteDenom', 'noteQty', 'goldAmt', 'goldUnit', 'winnersCount', 'prize']) delete clean[k];
+    clean.winnersCount = winnersCountOf(clean); clean.prize = surveyPrizeShort(clean);
     for (const k of ['endsAt', 'drawDate']) if (clean[k] && !dayRx.test(clean[k])) clean[k] = '';
     const errs = surveyProblems(clean);
+    const rate = (getSetting('goldback') || {}).rate;
+    if (rate && poolValue(clean, rate) > POOL_CAP) errs.push(`The total prize pool is worth about $${poolValue(clean, rate).toFixed(2)} at today's internal rate — over the $${POOL_CAP.toLocaleString()} limit per survey. Use fewer winners or fewer Gold Notes.`);
     if (errs.length) throw bad(errs[0], { problems: errs });
     saveSurvey(clean);
     audit(a.id, prev ? 'survey.update' : 'survey.create', { id: params.id, status: clean.status });
@@ -121,10 +125,18 @@ export function adminRoutes(r) {
     res.end('﻿' + rows.join('\r\n'));
   });
 
-  /* ----- Gold Note exchange rate (per 1/1000 oz) ----- */
+  /* ----- Gold in each Gold Note (default for new surveys) ----- */
+  r.put('/api/admin/settings/note', async (req, res) => {
+    const a = requireAdmin(req); const b = await jsonBody(req); const v = Number(b.noteOz);
+    if (!(v > 0 && v <= 10)) throw bad('Enter how much gold is in each Gold Note, in ounces (for example 0.001).');
+    setSetting('goldnote', { noteOz: +v.toFixed(6), updatedAt: Date.now() });
+    audit(a.id, 'settings.note_oz', { noteOz: v });
+    sendJson(res, 200, { ok: true });
+  });
+  /* ----- internal Gold Note rate ($ per note) — used only for the $999 limit, the $5,000 pool cap and records ----- */
   r.put('/api/admin/settings/goldback', async (req, res) => {
     const a = requireAdmin(req); const b = await jsonBody(req); const v = Number(b.rate);
-    if (!(v > 0 && v < 10000)) throw bad('Enter the rate for a 1/1000 oz Gold Note');
+    if (!(v > 0 && v < 10000)) throw bad('Enter the dollar rate for one Gold Note');
     const old = getSetting('goldback') || {};
     setSetting('goldback', { rate: +v.toFixed(2), updatedAt: Date.now(), history: [...(old.history || []), { rate: +v.toFixed(2), at: Date.now(), by: a.email }].slice(-120) });
     audit(a.id, 'settings.goldback', { rate: v });
@@ -140,27 +152,38 @@ export function adminRoutes(r) {
     if (!(rate > 0)) throw bad(`Set the Gold Note rate first: the draw checks the $${WIN_CAP} limit per person over 12 months.`, { code: 'no_rate' });
     const result = tx(() => {
       const s = surveyById(params.id); if (!s) throw new HttpError(404, 'Survey not found');
-      const prizeVal = estValue(s, rate);
-      if (prizeVal > WIN_CAP) throw bad(`Each prize is worth about $${prizeVal.toFixed(2)} at this rate — more than the $${WIN_CAP} a person can win in 12 months. Use a smaller prize per winner.`, { code: 'over_cap' });
+      const tiers = tiersOf(s); const noteOz = noteOzOf(s);
+      if (!tiers.length) throw bad('This survey has no prize places set.');
+      const top = tiers.find(t => estValue(t.notes, rate) > WIN_CAP);
+      if (top) throw bad(`${placeLabel(top.place)} (${top.notes} Gold Notes) is worth about $${estValue(top.notes, rate).toFixed(2)} at this rate — more than the $${WIN_CAP} a person can win in 12 months. Use fewer Gold Notes for that place.`, { code: 'over_cap' });
       const existing = all('SELECT * FROM winners WHERE survey_id = ?', s.id).map(rowWinner);
-      const need = Math.min(winnersCountOf(s) - existing.filter(w => w.status !== 'forfeited').length, Math.max(1, parseInt(b.count) || 999));
-      if (need <= 0) throw bad(`All ${winnersCountOf(s)} winners have been drawn.`, { code: 'full' });
+      const open = tiers.map(t => ({ ...t, need: t.winners - existing.filter(w => w.status !== 'forfeited' && (w.place || 1) === t.place).length })).filter(t => t.need > 0);
+      const totalNeed = open.reduce((a2, t) => a2 + t.need, 0);
+      if (totalNeed <= 0) throw bad(`All ${winnersCountOf(s)} winners have been drawn.`, { code: 'full' });
       const already = new Set(existing.map(w => w.responseId));
-      const notWon = all("SELECT * FROM responses WHERE survey_id = ? AND status = 'submitted'", s.id).map(rowResponse).filter(x => !already.has(x.id) && participantById(x.participantId));
-      const pool = notWon.filter(x => wonLast12(x.participantId, date) + prizeVal <= WIN_CAP);
-      const capped = notWon.length - pool.length;
-      if (!pool.length) throw bad(notWon.length ? `No eligible entries — ${capped} skipped by the $${WIN_CAP} / 12-month limit.` : 'There are no remaining entries to draw from.', { code: 'empty' });
+      const pool = all("SELECT * FROM responses WHERE survey_id = ? AND status = 'submitted'", s.id).map(rowResponse).filter(x => !already.has(x.id) && participantById(x.participantId));
+      if (!pool.length) throw bad('There are no remaining entries to draw from.', { code: 'empty' });
       for (let i = pool.length - 1; i > 0; i--) { const j = randomInt(i + 1); [pool[i], pool[j]] = [pool[j], pool[i]]; } // cryptographic shuffle
-      const picks = pool.slice(0, need); const saved = [];
-      for (const x of picks) {
-        const p = participantById(x.participantId);
-        const w = { id: newId('w_'), surveyId: s.id, responseId: x.id, participantId: p.id, status: 'notified', date, ...prizeFields(s),
-          firstName: p.firstName, lastInitial: (p.lastName || '').slice(0, 1).toUpperCase(), state: p.state, fullName: `${p.firstName} ${p.lastName}`,
-          contact: `${p.email} · ${fmtPhone(p.phone)} · Entry #${x.entryNo}`, gbRate: rate, estValue: prizeVal, claimDeadline: deadline, notifiedAt: Date.now(), log: [{ at: Date.now(), kind: 'won' }] };
-        w.prize = prizeLabel(w); saveWinner(w); saved.push(w);
+      // fill 1st place first, then 2nd, then 3rd, walking the shuffled entries; skip anyone the prize would put over the limit
+      const used = new Set(); const skipped = new Set(); const saved = [];
+      for (const t of open) {
+        const value = estValue(t.notes, rate); let got = 0;
+        for (const x of pool) {
+          if (got >= t.need) break;
+          if (used.has(x.id)) continue;
+          if (wonLast12(x.participantId, date) + value > WIN_CAP) { skipped.add(x.id); continue; }
+          used.add(x.id); got++;
+          const p = participantById(x.participantId);
+          const w = { id: newId('w_'), surveyId: s.id, responseId: x.id, participantId: p.id, status: 'notified', date, ...winnerPrize(t.place, t.notes, noteOz, rate),
+            firstName: p.firstName, lastInitial: (p.lastName || '').slice(0, 1).toUpperCase(), state: p.state, fullName: `${p.firstName} ${p.lastName}`,
+            contact: `${p.email} · ${fmtPhone(p.phone)} · Entry #${x.entryNo}`, claimDeadline: deadline, notifiedAt: Date.now(), log: [{ at: Date.now(), kind: 'won' }] };
+          saveWinner(w); saved.push(w);
+        }
       }
-      audit(a.id, 'draw', { surveyId: s.id, poolSize: pool.length, capped, need, picks: saved.map(w => w.responseId), rate, date });
-      return { saved, poolSize: pool.length, capped, need };
+      const capped = [...skipped].filter(id => !used.has(id)).length;
+      if (!saved.length) throw bad(capped ? `No eligible entries — ${capped} skipped by the $${WIN_CAP} / 12-month limit.` : 'There are no remaining entries to draw from.', { code: 'empty' });
+      audit(a.id, 'draw', { surveyId: s.id, poolSize: pool.length, capped, need: totalNeed, picks: saved.map(w => ({ response: w.responseId, place: w.place })), rate, date });
+      return { saved, poolSize: pool.length, capped, need: totalNeed };
     });
     for (const w of result.saved) notifyWinner(w, 'win');
     sendJson(res, 200, { ok: true, winners: result.saved, poolSize: result.poolSize, capped: result.capped, requested: result.need });
@@ -214,7 +237,7 @@ export function adminRoutes(r) {
     if (!b.sms && !b.email) throw bad('Choose text, email or both.');
     rateLimit('campaign:' + a.id, 10, 3600);
     const title = String(b.title || '').trim().slice(0, 120) || 'New survey — win gold!';
-    const defaultMsg = lang => lang === 'es' ? `Hay una nueva encuesta de Golden Opinions: "${L(s, 'title', 'es')}". Responde unas preguntas y participa para ganar ${prizePhrase(s, 'es')}.` : `A new Golden Opinions survey is live: "${s.title}". Answer a few questions for a chance to win ${prizePhrase(s)}!`;
+    const defaultMsg = lang => lang === 'es' ? `Hay una nueva encuesta de Golden Opinions: "${L(s, 'title', 'es')}". Responde unas preguntas y participa para ganar oro: ${surveyPrizeShort(s, 'es')}.` : `A new Golden Opinions survey is live: "${s.title}". Answer a few questions for a chance to win gold: ${surveyPrizeShort(s)}!`;
     const msgEn = String(b.message || '').trim().slice(0, 600) || defaultMsg('en');
     const msgEs = String(b.message_es || '').trim().slice(0, 600) || (b.message ? msgEn : defaultMsg('es'));
     const titleEs = String(b.title_es || '').trim().slice(0, 120) || title;
@@ -247,13 +270,11 @@ function winnerFromBody(base, b) {
   w.lastInitial = String(b.lastInitial ?? w.lastInitial ?? '').trim().slice(0, 1).toUpperCase();
   w.state = STATES.includes(b.state) ? b.state : w.state;
   if (!w.firstName || !w.state) throw bad('Add a first name and state');
-  Object.assign(w, prizeFields({ ...w, ...b }));
-  if (!(w.goldbacks > 0)) throw bad('Choose the Gold Note');
+  if (!(parseInt(b.notes ?? notesOf(w)) > 0)) throw bad('Enter the number of Gold Notes');
+  for (const k of ['goldbacks', 'noteDenom', 'noteQty', 'goldAmt', 'goldUnit']) delete w[k];
   w.date = dayRx.test(b.date || '') ? b.date : (w.date || today());
-  w.gbRate = Number(b.gbRate ?? w.gbRate) || 0;
-  w.estValue = estValue(w, w.gbRate);
+  Object.assign(w, winnerPrize(b.place ?? w.place ?? 1, b.notes ?? notesOf(w), b.noteOz ?? noteOzOf(w), Number(b.gbRate ?? w.gbRate) || 0));
   if (b.claimDeadline && dayRx.test(b.claimDeadline)) w.claimDeadline = b.claimDeadline;
-  w.prize = prizeLabel(w);
   return w;
 }
 

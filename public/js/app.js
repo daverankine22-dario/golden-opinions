@@ -1,6 +1,6 @@
 // Golden Opinions — participant web app (talks to the server API; no admin code here).
 import * as sh from './shared.js';
-import { STATES, GB_CHOICES, WIN_CAP, CLAIM_DAYS, fmtUSD, fmtPhone, maskPhone, maskEmail, normPhone, emailOk, winnerLabel, gbOf, winnersCountOf, answered, likertLabels, withUnit } from './shared.js';
+import { STATES, WIN_CAP, CLAIM_DAYS, fmtPhone, maskPhone, maskEmail, normPhone, emailOk, winnerLabel, winnersCountOf, answered, likertLabels, withUnit, tiersOf, noteOzOf, fmtOz } from './shared.js';
 import { esc, qInput as qInputShared } from './ui.js';
 import { I18N, I18N_RX } from './i18n-es.js';
 
@@ -14,7 +14,6 @@ const me = () => S.my && S.my.me;
 const myWins = () => (S.my && S.my.wins) || [];
 const myResp = sid => S.my && S.my.responses.find(r => r.surveyId === sid);
 const pubSurvey = id => S.pub.surveys.find(s => s.id === id);
-const gbRate = () => S.pub.rate;
 const vals = o => Object.values(o || {});
 
 /* ---------- language ---------- */
@@ -26,9 +25,16 @@ const fmtDT = t => t ? new Date(t).toLocaleString(LOC(), { month: 'short', day: 
 const dayFmt = d => d ? new Date(d + 'T12:00:00Z').toLocaleDateString(LOC(), { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '';
 const L = (o, k) => sh.L(o, k, curLang());
 const prizeLabel = x => sh.prizeLabel(x, curLang());
-const shortPrize = x => sh.shortPrize(x);
+const shortPrize = x => sh.shortPrize(x, curLang());
+const placeLabel = p => sh.placeLabel(p || 1, curLang());
+const tierPrize = (t, oz) => sh.tierPrize(t, oz, curLang());
+const surveyPrizeShort = s => sh.surveyPrizeShort(s, curLang());
+/* prize breakdown by place for a survey card: "1st place · 1 winner · 10 Gold Notes (0.01 oz of gold)" */
+function prizeList(s) {
+  const oz = noteOzOf(s);
+  return tiersOf(s).map(t => `<div class="tier"><b>${placeLabel(t.place)}</b> · ${t.winners} ${T(t.winners === 1 ? 'winner' : 'winners', t.winners === 1 ? 'ganador' : 'ganadores')} · <span class="goldtext" style="font-weight:800">${esc(tierPrize(t, oz))}</span></div>`).join('');
+}
 const answerText = (q, v) => sh.answerText(q, v, curLang());
-const estValue = (x, r) => sh.estValue(x, r);
 const drawDateOf = s => s.drawDate || s.endsAt || '';
 const qInput = (q, v) => qInputShared(q, v, curLang());
 function langToggle() { return `<div class="langtog notr" role="group" aria-label="Language / Idioma"><button class="${curLang() === 'en' ? 'on' : ''}" data-act="setLang" data-k="en" aria-label="English">EN</button><button class="${curLang() === 'es' ? 'on' : ''}" data-act="setLang" data-k="es" aria-label="Español">ES</button></div>`; }
@@ -75,9 +81,9 @@ function myMessages() {
   (S.my.responses || []).filter(r => r.status === 'submitted').forEach(r => { const st = S.my.surveyTitles[r.surveyId]; out.push({ id: 'r' + r.surveyId, kind: 'confirm', t: r.submittedAt, title: "You're entered! ✓", body: `Thanks for completing "${st ? L(st, 'title') : 'a survey'}". Entry #${r.entryNo}. Good luck in the gold draw!` }); });
   myWins().forEach(w => { const s = { title: w.surveyTitle, title_es: w.surveyTitle_es };
     (w.log || []).forEach((l, i) => {
-      if (l.kind === 'won') out.push({ id: 'w' + w.id + i, kind: 'win', winId: w.id, t: l.at, title: '🎉 You won!', body: `Congratulations! You won the "${L(s, 'title') || 'Golden Opinions'}" draw: ${shortPrize(w)}. Claim it in the app by ${dayFmt(w.claimDeadline)}. We'll never ask for payment or bank details.` });
-      if (l.kind === 'reminder') out.push({ id: 'w' + w.id + i, kind: 'win', winId: w.id, t: l.at, title: 'Reminder: claim your prize', body: `Your ${shortPrize(w)} prize is waiting. Claim it in the app by ${dayFmt(w.claimDeadline)}.` });
-      if (l.kind === 'shipped') out.push({ id: 'w' + w.id + i, kind: 'ship', t: l.at, title: '📦 Your prize has shipped', body: `Your ${shortPrize(w)} is on its way.${w.tracking ? ' Tracking: ' + w.tracking : ''}` });
+      if (l.kind === 'won') out.push({ id: 'w' + w.id + i, kind: 'win', winId: w.id, t: l.at, title: '🎉 You won!', body: T(`Congratulations! You won ${placeLabel(w.place)} in the "${L(s, 'title') || 'Golden Opinions'}" draw: ${prizeLabel(w)}. Claim it in the app by ${dayFmt(w.claimDeadline)}. We'll never ask for payment or bank details.`, `¡Felicidades! Ganaste el ${placeLabel(w.place)} del sorteo "${L(s, 'title') || 'Golden Opinions'}": ${prizeLabel(w)}. Reclámalo en la app antes del ${dayFmt(w.claimDeadline)}. Nunca te pediremos pagos ni datos bancarios.`) });
+      if (l.kind === 'reminder') out.push({ id: 'w' + w.id + i, kind: 'win', winId: w.id, t: l.at, title: 'Reminder: claim your prize', body: T(`Your prize (${prizeLabel(w)}) is waiting. Claim it in the app by ${dayFmt(w.claimDeadline)}.`, `Tu premio (${prizeLabel(w)}) te está esperando. Reclámalo en la app antes del ${dayFmt(w.claimDeadline)}.`) });
+      if (l.kind === 'shipped') out.push({ id: 'w' + w.id + i, kind: 'ship', t: l.at, title: '📦 Your prize has shipped', body: T(`Your prize (${prizeLabel(w)}) is on its way.`, `Tu premio (${prizeLabel(w)}) va en camino.`) + (w.tracking ? T(' Tracking: ', ' Rastreo: ') + w.tracking : '') });
     }); });
   return out.sort((a, b) => b.t - a.t);
 }
@@ -95,7 +101,7 @@ function render() {
 function go(v) { S.view = v; render(); window.scrollTo(0, 0); }
 
 /* ---------- screens (from the approved prototype) ---------- */
-function winnerRow(x){return `<div><span style="white-space:nowrap"><b>${esc(winnerLabel(x))}</b></span><span style="text-align:right"><span class="goldtext" style="font-weight:800">${esc(shortPrize(x))}</span>${x.estValue?`<div class="faint tiny">est. value ${fmtUSD(x.estValue)}</div>`:''}</span></div>`}
+function winnerRow(x){return `<div><span style="white-space:nowrap"><b>${esc(winnerLabel(x))}</b></span><span style="text-align:right"><span class="goldtext notr" style="font-weight:800">${esc(shortPrize(x))}</span><div class="faint tiny notr">${esc(placeLabel(x.place))}</div></span></div>`}
 function winnersCard(){
   const w=S.pub.winners||[];const cnt=S.pub.winnerCount||w.length;
   const head=`<div class="winners"><div class="coin">${cnt}</div><div style="flex:1"><div style="font-weight:900;font-size:18px">${cnt===1?'1 winner has':cnt+' winners have'} won gold</div><div class="muted small">${w.length?'Recent Winners':'Be one of the first winners!'}</div></div>${w.length?'<span class="goldtext" style="font-weight:900;font-size:22px" aria-hidden="true">›</span>':''}</div>`;
@@ -107,14 +113,14 @@ function viewWinners(){
   return `<div class="wrap">
   <div class="topbar"><button class="iconbtn" data-act="winnersBack" aria-label="Back">←</button><h2 style="margin:0">Recent Winners</h2>${langToggle()}</div>
   <p class="muted small" style="margin-top:0">The last ${w.length===1?'winner':w.length+' winners'} of our gold draws.</p>
-  <div class="card">${w.map(x=>`<div class="review-item"><div><div style="font-weight:800;white-space:nowrap">${esc(winnerLabel(x))}</div><div class="faint tiny">${x.date?dayFmt(x.date):''}</div></div><div style="text-align:right"><div class="goldtext" style="font-weight:800;font-size:14px">${esc(shortPrize(x))}</div>${x.estValue?`<div class="faint tiny">est. value ${fmtUSD(x.estValue)}</div>`:''}</div></div>`).join('')||'<div class="muted center">No winners yet.</div>'}</div>
+  <div class="card">${w.map(x=>`<div class="review-item"><div><div style="font-weight:800;white-space:nowrap">${esc(winnerLabel(x))}</div><div class="faint tiny">${x.date?dayFmt(x.date):''}</div></div><div style="text-align:right"><div class="goldtext notr" style="font-weight:800;font-size:14px">${esc(shortPrize(x))}</div><div class="faint tiny notr">${esc(placeLabel(x.place))}</div></div></div>`).join('')||'<div class="muted center">No winners yet.</div>'}</div>
   <div style="height:16px"></div>
   <button class="btn big" data-act="winnersBack">← Back</button>
   </div>`;
 }
 function winBanners(){
   return myWins().map(w=>{const st=w.status;const s={title:w.surveyTitle,title_es:w.surveyTitle_es};
-    if(st==='notified')return `<div class="goldcard" style="margin-bottom:14px"><div style="font-weight:900;font-size:20px">${T('🎉 You won!','🎉 ¡Ganaste!')}</div><div class="muted small notr" style="margin-top:4px">${T(`You're the winner of the <b>${esc(s?L(s,'title'):'')}</b> draw: <b>${esc(shortPrize(w))}</b>${w.estValue?` (est. value ${fmtUSD(w.estValue)})`:''}. Claim it by <b>${dayFmt(w.claimDeadline)}</b>.`,`Ganaste el sorteo <b>${esc(s?L(s,'title'):'')}</b>: <b>${esc(shortPrize(w))}</b>${w.estValue?` (valor est. ${fmtUSD(w.estValue)})`:''}. Reclámalo antes del <b>${dayFmt(w.claimDeadline)}</b>.`)}</div><div style="margin-top:12px"><button class="btn" style="border-color:#7a4b00;color:#3a2500;background:rgba(255,255,255,.35)" data-act="claimOpen" data-id="${esc(w.id)}">${T('Claim my prize →','Reclamar mi premio →')}</button></div></div>`;
+    if(st==='notified')return `<div class="goldcard" style="margin-bottom:14px"><div style="font-weight:900;font-size:20px">${T('🎉 You won!','🎉 ¡Ganaste!')}</div><div class="muted small notr" style="margin-top:4px">${T(`You won <b>${esc(placeLabel(w.place))}</b> in the <b>${esc(s?L(s,'title'):'')}</b> draw: <b>${esc(prizeLabel(w))}</b>. Claim it by <b>${dayFmt(w.claimDeadline)}</b>.`,`Ganaste el <b>${esc(placeLabel(w.place))}</b> del sorteo <b>${esc(s?L(s,'title'):'')}</b>: <b>${esc(prizeLabel(w))}</b>. Reclámalo antes del <b>${dayFmt(w.claimDeadline)}</b>.`)}</div><div style="margin-top:12px"><button class="btn" style="border-color:#7a4b00;color:#3a2500;background:rgba(255,255,255,.35)" data-act="claimOpen" data-id="${esc(w.id)}">${T('Claim my prize →','Reclamar mi premio →')}</button></div></div>`;
     const recent=t=>t&&Date.now()-t<30*864e5;
     if(st==='claimed'&&recent(w.claimedAt))return `<div class="card" style="margin-bottom:14px;border-color:rgba(74,222,128,.5)"><b>✓ Prize claimed</b><div class="muted small" style="margin-top:4px">Your ${esc(shortPrize(w))} will ship soon. We'll text you when it's on its way.</div></div>`;
     if(st==='shipped'&&recent(w.shippedAt))return `<div class="card" style="margin-bottom:14px;border-color:rgba(74,222,128,.5)"><b>📦 Your prize has shipped</b><div class="muted small" style="margin-top:4px">${esc(shortPrize(w))}${w.tracking?` · Tracking: <b>${esc(w.tracking)}</b>`:''}</div></div>`;
@@ -129,13 +135,13 @@ function viewClaim(){
   const st=w.status;const s={title:w.surveyTitle,title_es:w.surveyTitle_es};
   if(st==='expired'||st==='forfeited')return `<div class="wrap">${top}<div class="card"><b>The claim window has closed</b><p class="muted small">This prize needed to be claimed by ${dayFmt(w.claimDeadline)}. Under the Official Rules an alternate winner may be selected. Questions? Contact [support email].</p></div></div>`;
   if(st==='claimed'||st==='shipped')return `<div class="wrap">${top}<div class="big-check"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
-    <h1 class="h-xl" style="font-size:30px">Prize claimed!</h1><p class="muted center">Your <b>${esc(shortPrize(w))}</b> will be shipped to:</p>
+    <h1 class="h-xl" style="font-size:30px">Prize claimed!</h1><p class="muted center">Your <b class="notr">${esc(prizeLabel(w))}</b> will be shipped to:</p>
     <div class="card small">${esc(w.shipTo?.name||'')}<br>${esc(w.shipTo?.street||'')}<br>${esc(w.shipTo?.city||'')}, ${esc(w.shipTo?.state||'')} ${esc(w.shipTo?.zip||'')}</div>
     <p class="muted small center">${st==='shipped'?`Shipped ${fmtDate(w.shippedAt)}${w.tracking?' · Tracking: <b>'+esc(w.tracking)+'</b>':''}`:"We'll text and email you when it ships."}</p>
     <button class="btn gold big" data-act="home">Back to surveys</button></div>`;
   const A=p.address||{};
   return `<div class="wrap">${top}
-  <div class="goldcard"><div class="muted tiny" style="font-weight:800">YOU WON</div><div style="font-weight:900;font-size:22px">${esc(prizeLabel(w))}</div><div class="muted small" style="margin-top:4px">${esc(s?L(s,'title'):'')} draw · ${dayFmt(w.date)}${w.estValue?` · est. value ${fmtUSD(w.estValue)}`:''}</div></div>
+  <div class="goldcard"><div class="muted tiny notr" style="font-weight:800">${esc(T('YOU WON ','GANASTE EL ')+placeLabel(w.place).toUpperCase())}</div><div class="notr" style="font-weight:900;font-size:22px">${esc(prizeLabel(w))}</div><div class="muted small" style="margin-top:4px">${esc(s?L(s,'title'):'')} draw · ${dayFmt(w.date)}</div></div>
   <div class="note" style="margin-top:12px">⏰ Claim by <b>${dayFmt(w.claimDeadline)}</b>. 🔒 We will <b>never</b> ask for payment, shipping fees, gift cards or bank details.</div>
   <form id="claimForm" class="card" style="margin-top:12px">
     <h3>Where should we ship it?</h3>
@@ -342,8 +348,8 @@ function viewHome(){
     return `<button class="card survey" data-act="open" data-id="${esc(s.id)}">
       <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><h3 style="margin:0" class="notr">${esc(L(s,'title'))}</h3>${st}</div>
       <div class="muted small notr" style="margin-top:6px">${esc(L(s,'description')||'')}</div>
-      <div class="meta"><span class="chip">${s.questionCount} questions</span><span class="chip">~${mins} min</span>${prizeLabel(s)?`<span class="chip warn">🏆 ${winnersCountOf(s)>1?winnersCountOf(s)+' winners · '+esc(shortPrize(s))+' each':esc(prizeLabel(s))}</span>`:''}${s.endsAt?`<span class="chip off">Ends ${dayFmt(s.endsAt)}</span>`:''}${drawDateOf(s)?`<span class="chip off">Drawing ${dayFmt(drawDateOf(s))}</span>`:''}</div>
-      ${gbRate()&&estValue(s,gbRate().rate)?`<div style="margin-top:10px;font-size:14px"><span class="goldtext" style="font-weight:900">Est. value ${fmtUSD(estValue(s,gbRate().rate))}${winnersCountOf(s)>1?' each':''}*</span> <span class="faint tiny">on drawing day</span></div>`:''}
+      <div class="meta"><span class="chip">${s.questionCount} questions</span><span class="chip">~${mins} min</span>${tiersOf(s).length?`<span class="chip warn notr">🏆 ${esc(surveyPrizeShort(s))}</span>`:''}${s.endsAt?`<span class="chip off">Ends ${dayFmt(s.endsAt)}</span>`:''}${drawDateOf(s)?`<span class="chip off">Drawing ${dayFmt(drawDateOf(s))}</span>`:''}</div>
+      ${tiersOf(s).length?`<div class="tiers notr">${prizeList(s)}</div>`:''}
     </button>`}).join('');
   return `<div class="wrap">
   <div class="topbar"><img src="${LOGO}" alt="Golden Opinions"><div style="display:flex;gap:8px;align-items:center">${langToggle()}<button class="iconbtn" data-act="inbox" aria-label="Messages">✉️${n?`<span class="badge">${n}</span>`:''}</button><button class="iconbtn" data-act="settings" aria-label="Settings" title="Settings">⚙️</button></div></div>
@@ -353,7 +359,7 @@ function viewHome(){
   <h2 style="margin-top:22px">Pick a questionnaire</h2>
   <p class="muted small" style="margin-top:0">Finish a survey to be entered into that survey's gold draw. One entry per person per survey.</p>
   ${cards||`<div class="card center muted">No surveys are open right now. We'll let you know when the next one goes live${p.optIn?'':' — turn on alerts below'}.</div>`}
-  ${gbRate()&&list.length?`<p class="faint tiny" style="margin:10px 4px 0">*Estimated using the official Gold Note exchange rate of ${fmtUSD(gbRate().rate)} per 1/1000 troy oz as of ${fmtDate(gbRate().updatedAt)}. Prizes are Gold Notes containing 24K gold. Actual value is based on the official exchange rate on the drawing day.</p>`:''}
+  ${list.length?`<p class="faint tiny" style="margin:10px 4px 0">Prizes are Gold Notes containing 24-karat gold. Amounts shown are the gold each winner receives.</p>`:''}
   <div class="card" style="margin-top:18px"><label class="check" style="margin:0"><input type="checkbox" data-act="optin" ${p.optIn?'checked':''}><span>Alert me by text &amp; email when new surveys go live</span></label><div class="faint tiny" style="margin-top:8px"><a href="#" data-act="settings">Account settings</a> · Signed in as ${esc([p.firstName,p.lastName].filter(Boolean).join(' '))} · ${esc(p.email)} · ${esc(fmtPhone(p.phone))}</div></div>
   ${footer()}
   </div>`;
@@ -408,7 +414,7 @@ function viewDone(){
     <div class="small muted" style="font-weight:700;margin:14px 0 8px">${T('Confirmation text sent to','Mensaje de confirmación enviado a')} ${esc(maskPhone(p.phone))}</div>
     <div class="phone-msg">${T(`Golden Opinions: You're entered! Thanks for completing "${esc(title)}". Entry #${esc(no)}. Winners are notified directly. Reply STOP to opt out.`,`Golden Opinions: ¡Ya estás participando! Gracias por completar "${esc(title)}". Participación #${esc(no)}. Notificamos directamente a los ganadores. Responde STOP para cancelar.`)}</div>
     <div class="small muted" style="font-weight:700;margin:16px 0 8px">${T('Confirmation email sent to','Correo de confirmación enviado a')} ${esc(p.email)}</div>
-    <div class="email-prev"><div class="eh"><b>${T('From','De')}:</b> Golden Opinions · <b>${T('Subject','Asunto')}:</b> ${T("You're entered to win gold 🏆",'Ya participas para ganar oro 🏆')}</div><div class="eb">${T('Hi','Hola')} ${esc(p.firstName||T('there',''))},<br><br>${T('Thanks for sharing your opinion in','Gracias por compartir tu opinión en')} <b>${esc(title)}</b>. ${T('Your entry number is','Tu número de participación es')} <b>#${esc(no)}</b>.<br><br>${c&&prizeLabel(c.survey)?`${T('Prize','Premio')}: ${esc(prizeLabel(c.survey))}${winnersCountOf(c.survey)>1?T(` for each of ${winnersCountOf(c.survey)} winners`,` para cada uno de ${winnersCountOf(c.survey)} ganadores`):''}${gbRate()&&estValue(c.survey,gbRate().rate)?T(` — est. value ${fmtUSD(estValue(c.survey,gbRate().rate))} on drawing day`,` — valor est. ${fmtUSD(estValue(c.survey,gbRate().rate))} el día del sorteo`)+(drawDateOf(c.survey)?', '+dayFmt(drawDateOf(c.survey)):''):''}.<br><br>`:''}${T("We'll contact winners directly by phone or email. No purchase necessary.",'Contactaremos a los ganadores directamente por teléfono o correo. No se requiere compra.')}<br><br>— ${T('The Golden Opinions team','El equipo de Golden Opinions')}</div></div>
+    <div class="email-prev"><div class="eh"><b>${T('From','De')}:</b> Golden Opinions · <b>${T('Subject','Asunto')}:</b> ${T("You're entered to win gold 🏆",'Ya participas para ganar oro 🏆')}</div><div class="eb">${T('Hi','Hola')} ${esc(p.firstName||T('there',''))},<br><br>${T('Thanks for sharing your opinion in','Gracias por compartir tu opinión en')} <b>${esc(title)}</b>. ${T('Your entry number is','Tu número de participación es')} <b>#${esc(no)}</b>.<br><br>${c&&tiersOf(c.survey).length?`${T('Prizes','Premios')}: ${esc(surveyPrizeShort(c.survey))}${drawDateOf(c.survey)?T('. Drawing: ','. Sorteo: ')+dayFmt(drawDateOf(c.survey)):''}.<br><br>`:''}${T("We'll contact winners directly by phone or email. No purchase necessary.",'Contactaremos a los ganadores directamente por teléfono o correo. No se requiere compra.')}<br><br>— ${T('The Golden Opinions team','El equipo de Golden Opinions')}</div></div>
     ${S.pub.testMode?`<p class="faint tiny">${T('Test mode: these previews show what will be sent once texting and email are connected.','Modo de prueba: estas vistas previas muestran lo que se enviará cuando se conecten los mensajes y el correo.')}</p>`:''}
   </div>
   <div style="height:10px"></div>
@@ -446,7 +452,7 @@ rules:['Official Rules',`
 <h3>Sponsor</h3><p>[Company legal name], [address].</p>
 <h3>Eligibility</h3><p>Legal residents of the 50 U.S. states and D.C., 18+ (or age of majority). Employees of Sponsor and their immediate families are not eligible. Void where prohibited.</p>
 <h3>How to enter</h3><p>(1) Complete an eligible survey in the Golden Opinions app during its entry period; or (2) <b>Alternate method of entry:</b> hand-print your name, address, email, phone and the survey name on a 3"×5" card and mail it to [address], postmarked by the survey end date. Limit one entry per person per survey regardless of method.</p>
-<h3>Prizes</h3><p>Each survey's prize is one or more Gold Notes containing the stated amount of 24-karat gold (for example, a 1/100 oz Gold Note). The approximate retail value (ARV) is based on the official Gold Note exchange rate published by the issuer on the drawing date; the estimate shown before the drawing may differ. Prizes are not transferable; no cash substitute except at Sponsor's discretion. The issuer of the Gold Notes is not a sponsor of and is not affiliated with this promotion.</p>
+<h3>Prizes</h3><p>Each survey awards up to three prize places. For each place the survey shows the number of winners and the number of Gold Notes each winner receives, and the amount of 24-karat gold they contain. The approximate retail value (ARV) of each prize is based on the official Gold Note exchange rate on the drawing date. Prizes are not transferable; no cash substitute except at Sponsor's discretion. The issuer of the Gold Notes is not a sponsor of and is not affiliated with this promotion.</p>
 <h3>Drawing &amp; odds</h3><p>Winners are selected in a random drawing from all eligible entries within [X] days after the survey closes. Odds depend on the number of eligible entries.</p>
 <h3>Winning limit</h3><p>No person may win prizes with a combined approximate retail value of more than $${WIN_CAP} in any 12 consecutive months. Each prize's value is set by the official Gold Note exchange rate on its drawing date. Entries from a person who would exceed this limit are skipped in that drawing, but the person may still take surveys and will be eligible again once their 12-month total allows.</p>
 <h3>Notification &amp; claiming</h3><p>Winners are notified by text message and email and must claim the prize in the Golden Opinions app within ${CLAIM_DAYS} days of notification. If a prize is not claimed by the deadline, it will be forfeited and an alternate winner may be selected at random from the remaining eligible entries. Sponsor will never ask a winner for payment, shipping fees, gift cards or bank details. Winners may be required to sign an affidavit of eligibility and release. Winners are responsible for applicable taxes; prize income may be taxable even when no IRS Form 1099 is issued. Because of the winning limit, Sponsor does not expect any winner to reach the Form 1099-MISC reporting threshold.</p>

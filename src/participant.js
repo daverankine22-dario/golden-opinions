@@ -4,7 +4,7 @@ import { config } from './config.js';
 import { all, get, run, tx, rowParticipant, rowSurvey, rowResponse, rowWinner, saveParticipant, saveWinner, getSetting, audit } from './db.js';
 import { HttpError, bad, newId, sha256, sixDigits, jsonBody, sendJson, createSession, readSession, endSession, rateLimit, clientIp, safeEqual } from './http.js';
 import { T as MSG, sendBoth, queueSms, queueEmail, checkUnsubToken } from './messaging.js';
-import { STATES, normPhone, emailOk, maskPhone, maskEmail, localDay, addDays, wStatus, cleanAnswers, prizeLabel, estValue, gbOf, L, winnersCountOf } from '../public/js/shared.js';
+import { STATES, normPhone, emailOk, maskPhone, maskEmail, localDay, addDays, wStatus, cleanAnswers, L, winnersCountOf, tiersOf, noteOzOf, notesOf, winnerGoldOz, surveyPrizeShort } from '../public/js/shared.js';
 
 const today = () => localDay(Date.now(), config.timeZone);
 const PENDING_SECONDS = 15 * 60;
@@ -55,25 +55,24 @@ function meView(p) {
 }
 /* What anyone may see about a winner */
 function publicWinner(w) {
-  return { firstName: w.firstName, lastInitial: w.lastInitial, state: w.state, goldbacks: w.goldbacks, noteDenom: w.noteDenom, noteQty: w.noteQty, goldUnit: w.goldUnit, estValue: w.estValue, date: w.date };
+  return { firstName: w.firstName, lastInitial: w.lastInitial, state: w.state, place: w.place || 1, notes: notesOf(w), noteOz: noteOzOf(w), goldOz: winnerGoldOz(w), date: w.date };
 }
 function publicSurvey(s, withQuestions) {
-  const { id, title, title_es, description, description_es, winnersCount, goldbacks, noteDenom, noteQty, goldUnit, endsAt, drawDate, status, questions } = s;
-  const out = { id, title, title_es, description, description_es, winnersCount, goldbacks, noteDenom, noteQty, goldUnit, endsAt, drawDate, status, questionCount: (questions || []).length };
+  const { id, title, title_es, description, description_es, endsAt, drawDate, status, questions } = s;
+  const out = { id, title, title_es, description, description_es, tiers: tiersOf(s), noteOz: noteOzOf(s), winnersCount: winnersCountOf(s), endsAt, drawDate, status, questionCount: (questions || []).length };
   if (withQuestions) out.questions = questions;
   return out;
 }
 
 /* ---------- routes ---------- */
 export function participantRoutes(r) {
-  // Public home data: live surveys, recent winners (public fields only), Gold Note rate
+  // Public home data: live surveys and recent winners (public fields only). No dollar values are ever sent to participants.
   r.get('/api/public', async (req, res) => {
     const surveys = all("SELECT * FROM surveys WHERE status = 'live' ORDER BY created_at DESC").map(rowSurvey).filter(isLive).map(s => publicSurvey(s));
     const t = today();
     const winners = all("SELECT * FROM winners WHERE status IN ('claimed','shipped') ORDER BY draw_date DESC, created_at DESC LIMIT 200").map(rowWinner)
       .filter(w => ['claimed', 'shipped'].includes(wStatus(w, t)) && w.consentPublish !== false);
-    const rate = getSetting('goldback');
-    sendJson(res, 200, { surveys, winners: winners.slice(0, 25).map(publicWinner), winnerCount: winners.length, rate: rate ? { rate: rate.rate, updatedAt: rate.updatedAt } : null, testMode: !config.smsEnabled && !config.emailEnabled, supportEmail: config.supportEmail });
+    sendJson(res, 200, { surveys, winners: winners.slice(0, 25).map(publicWinner), winnerCount: winners.length, testMode: !config.smsEnabled && !config.emailEnabled, supportEmail: config.supportEmail });
   });
 
   /* ----- sign up / log in with a 6-digit code ----- */
@@ -170,7 +169,7 @@ export function participantRoutes(r) {
       .map(x => ({ surveyId: x.surveyId, status: x.status, entryNo: x.entryNo, submittedAt: x.submittedAt, answers: x.status === 'draft' ? x.answers : undefined, startedAt: x.startedAt }));
     const wins = all('SELECT * FROM winners WHERE participant_id = ? ORDER BY created_at DESC', p.id).map(rowWinner)
       .filter(w => wStatus(w, t) !== 'forfeited')
-      .map(w => { const s = surveyById(w.surveyId); return { id: w.id, surveyId: w.surveyId, surveyTitle: s ? s.title : '', surveyTitle_es: s ? s.title_es : '', status: wStatus(w, t), claimDeadline: w.claimDeadline, date: w.date, goldbacks: w.goldbacks, noteDenom: w.noteDenom, noteQty: w.noteQty, goldUnit: w.goldUnit, estValue: w.estValue, firstName: w.firstName, lastInitial: w.lastInitial, state: w.state, shipTo: w.shipTo, tracking: w.tracking, claimedAt: w.claimedAt, shippedAt: w.shippedAt, log: (w.log || []).map(l => ({ at: l.at, kind: l.kind })) }; });
+      .map(w => { const s = surveyById(w.surveyId); return { id: w.id, surveyId: w.surveyId, surveyTitle: s ? s.title : '', surveyTitle_es: s ? s.title_es : '', status: wStatus(w, t), claimDeadline: w.claimDeadline, date: w.date, place: w.place || 1, notes: notesOf(w), noteOz: noteOzOf(w), goldOz: winnerGoldOz(w), firstName: w.firstName, lastInitial: w.lastInitial, state: w.state, shipTo: w.shipTo, tracking: w.tracking, claimedAt: w.claimedAt, shippedAt: w.shippedAt, log: (w.log || []).map(l => ({ at: l.at, kind: l.kind })) }; });
     const surveyTitles = {};
     for (const x of responses) { const s = surveyById(x.surveyId); if (s) surveyTitles[s.id] = { title: s.title, title_es: s.title_es }; }
     const campaigns = p.optIn ? all('SELECT * FROM campaigns WHERE sent_at >= ? ORDER BY sent_at DESC LIMIT 20', (p.createdAt || 0) - 30 * 864e5).map(c => { const d = JSON.parse(c.data); return { id: c.id, title: d.title, title_es: d.title_es, message: d.message, message_es: d.message_es, surveyId: d.surveyId, sentAt: c.sent_at }; }) : [];
@@ -258,8 +257,7 @@ export function participantRoutes(r) {
            ON CONFLICT(id) DO UPDATE SET status = 'submitted', answers = excluded.answers, lang = excluded.lang, entry_no = excluded.entry_no, email = excluded.email, phone = excluded.phone, updated_at = excluded.updated_at, submitted_at = excluded.submitted_at`,
         id, s.id, p.id, p.email, p.phone, JSON.stringify(answers), lang, entryNo, prev ? prev.started_at : now, now, now);
     });
-    const rate = getSetting('goldback');
-    sendBoth(p, MSG.confirm(lang, { firstName: p.firstName, title: L(s, 'title', lang), entryNo, prize: prizeLabel(s, lang) + (winnersCountOf(s) > 1 ? (lang === 'es' ? ` para cada uno de ${winnersCountOf(s)} ganadores` : ` for each of ${winnersCountOf(s)} winners`) : ''), est: rate ? estValue(s, rate.rate) : 0, drawDate: fmtDay(s.drawDate || s.endsAt, lang) }), 'confirm');
+    sendBoth(p, MSG.confirm(lang, { firstName: p.firstName, title: L(s, 'title', lang), entryNo, prize: surveyPrizeShort(s, lang), drawDate: fmtDay(s.drawDate || s.endsAt, lang) }), 'confirm');
     sendJson(res, 200, { ok: true, entryNo, submittedAt: now });
   });
 

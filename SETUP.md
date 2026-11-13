@@ -71,8 +71,8 @@ Log in at `https://admin.goldenopinions.com`: email + password, then the 6-digit
 
 ## 6. Set up your first survey
 
-1. **Overview → Gold Note exchange rate**: enter today's rate for a 1/1000 oz Gold Note from the issuer's website (updated daily at 10 AM MST).
-2. **Surveys & reports → + New survey** (or **+ Sample survey** to see every answer type). Fill in the Spanish (🇪🇸 Español) sections, choose the number of winners and the Gold Note per winner, set the end and drawing dates, and use **Preview on phone**.
+1. **Overview → Gold Note size**: the ounces of gold in each Gold Note (e.g. 0.001). **Overview → Internal Gold Note rate**: today's dollar value of one note. The rate is never shown to participants; it only enforces the $999 / 12-month limit and the $5,000 per-survey cap.
+2. **Surveys & reports → + New survey** (or **+ Sample survey** to see every answer type). Fill in the Spanish (🇪🇸 Español) sections, fill in **Prizes by place** (number of winners and Gold Notes for 1st, 2nd and 3rd place; the gold each winner receives is calculated for you), set the end and drawing dates, and use **Preview on phone**.
 3. Set **Status → Live** and save.
 4. Make the QR code for your posters point at `https://goldenopinions.com`.
 
@@ -86,7 +86,7 @@ Log in at `https://admin.goldenopinions.com`: email + password, then the 6-digit
 
 ## 8. Drawing day
 
-1. Update the **Gold Note exchange rate** after 10 AM MST.
+1. Update the **Internal Gold Note rate** (Overview). **Draw winners** fills 1st place first, then 2nd, then 3rd.
 2. Open the survey's report → **Draw N winners** → check the date, rate and claim deadline → **Draw & notify**. Winners get a text and an email immediately; anyone who would exceed $999 in 12 months is skipped automatically.
 3. **Winners → To ship**: when someone claims, buy or pull the notes, ship them insured with tracking, then **Mark shipped** (the winner is notified).
 4. Reminders go out automatically on day 3 and day 7. After the deadline, **Draw alternate** fills the spot.
