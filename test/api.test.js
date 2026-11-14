@@ -60,16 +60,21 @@ test('admin creates a survey and sets the Gold Note rate', async () => {
   surveyId = 's_test1';
   const bad = await admin.put('/api/admin/surveys/' + surveyId, { survey: { title: '', questions: qs, tiers: [{ place: 1, winners: 1, notes: 10 }] } });
   assert.equal(bad.status, 400);
-  const r = await admin.put('/api/admin/surveys/' + surveyId, { survey: { title: 'Test survey', status: 'live', questions: qs, tiers: [{ place: 1, winners: 1, notes: 10 }, { place: 2, winners: 1, notes: 5 }, { place: 3, winners: 1, notes: 1 }], noteOz: 0.001, title_es: 'Encuesta' } });
+  const base1 = { title: 'Test survey', status: 'live', questions: qs, tiers: [{ place: 1, winners: 1, notes: 10 }, { place: 2, winners: 1, notes: 5 }, { place: 3, winners: 1, notes: 1 }], noteOz: 0.001, title_es: 'Encuesta' };
+  const noRate = await admin.put('/api/admin/surveys/' + surveyId, { survey: base1 });
+  assert.equal(noRate.status, 400, 'a live survey needs its Gold Note value'); assert.match(noRate.body.error, /dollar value of one Gold Note/);
+  const r = await admin.put('/api/admin/surveys/' + surveyId, { survey: { ...base1, noteRate: 7.5 } });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.survey.winnersCount, 3); assert.equal(r.body.survey.tiers.filter(t => t.winners).length, 3);
-  assert.equal((await admin.put('/api/admin/settings/goldback', { rate: 7.5 })).status, 200);
+  assert.equal(r.body.survey.noteRate, 7.5); assert.ok(/^\d{4}-\d\d-\d\d$/.test(r.body.survey.rateDate), 'value is dated the day it was entered');
   const pub = await new Client().get('/api/public');
   assert.equal(pub.body.surveys.length, 1); assert.equal(pub.body.surveys[0].questions, undefined, 'questions are not exposed publicly');
-  assert.equal(pub.body.rate, undefined, 'no dollar rate is sent to participants');
+  assert.equal(pub.body.rate, undefined, 'no dollar rate is sent to participants'); assert.equal(pub.body.surveys[0].noteRate, undefined);
   assert.deepEqual(pub.body.surveys[0].tiers.map(t => t.notes), [10, 5, 1]);
   assert.equal(pub.body.surveys[0].noteOz, 0.001);
-  const tooBig = await admin.put('/api/admin/surveys/s_toobig', { survey: { title: 'Too big', status: 'draft', questions: qs, tiers: [{ place: 1, winners: 10, notes: 80 }] } });
+  const tooBig = await admin.put('/api/admin/surveys/s_toobig', { survey: { title: 'Too big', status: 'draft', questions: qs, tiers: [{ place: 1, winners: 10, notes: 80 }], noteRate: 7.5 } });
+  const topTooBig = await admin.put('/api/admin/surveys/s_toobig', { survey: { title: 'Top too big', status: 'draft', questions: qs, tiers: [{ place: 1, winners: 1, notes: 80 }], noteRate: 20 } });
+  assert.match(topTooBig.body.error, /\$999/, '80 notes at $20 = $1,600 is over the yearly limit');
   assert.match(tooBig.body.error, /\$5,000/, '800 notes × $7.50 = $6,000 is over the per-survey cap');
 });
 
@@ -116,11 +121,11 @@ test('draws: server-side, winners notified, $999 / 12-month limit, claim and shi
   // more entrants
   const clients = [];
   for (let i = 3; i <= 6; i++) { const c = new Client(); await signup(c, i); const { body: { survey } } = await c.get('/api/surveys/' + surveyId); assert.equal((await c.post(`/api/surveys/${surveyId}/submit`, { answers: fullAnswers(survey) })).status, 200); clients.push(c); }
-  const d = await admin.post(`/api/admin/surveys/${surveyId}/draw`, { gbRate: 7.5 });
+  const d = await admin.post(`/api/admin/surveys/${surveyId}/draw`, {});
   assert.equal(d.status, 200, JSON.stringify(d.body)); assert.equal(d.body.winners.length, 3); assert.equal(d.body.poolSize, 5);
   assert.deepEqual(d.body.winners.map(w => [w.place, w.notes, w.goldOz]), [[1, 10, 0.01], [2, 5, 0.005], [3, 1, 0.001]]);
   assert.equal(new Set(d.body.winners.map(w => w.participantId)).size, 3, 'no one picked twice');
-  assert.equal((await admin.post(`/api/admin/surveys/${surveyId}/draw`, { gbRate: 7.5 })).body.code, 'full');
+  assert.equal((await admin.post(`/api/admin/surveys/${surveyId}/draw`, {})).body.code, 'full');
   assert.ok(db.get("SELECT * FROM audit WHERE action = 'draw'"), 'draw is in the audit log');
   assert.equal(db.all("SELECT * FROM outbox WHERE kind = 'win'").length, 6, 'text + email per winner');
   // a winner logs in and claims
@@ -135,18 +140,29 @@ test('draws: server-side, winners notified, $999 / 12-month limit, claim and shi
   assert.equal((await admin.post(`/api/admin/winners/${w.id}/ship`, { tracking: '9400' })).status, 200);
   const pubW = (await new Client().get('/api/public')).body.winners[0];
   assert.equal(pubW.estValue, undefined, 'no dollar values in public winners'); assert.ok(pubW.goldOz > 0 && pubW.place >= 1);
-  // limit: a $600 prize (80 notes × $7.50); someone who already won $600 this year is skipped for another
-  const s2 = { title: 'Big prize', status: 'live', questions: [Object.assign(newQuestion('text', 'q0'), { text: 'Hi' })], tiers: [{ place: 1, winners: 1, notes: 80 }] };
+  // yearly limit: two $600 prizes (80 notes × $7.50). Everyone enters both; the first winner is skipped in the second draw.
+  const s2 = { title: 'Big prize', status: 'live', questions: [Object.assign(newQuestion('text', 'q0'), { text: 'Hi' })], tiers: [{ place: 1, winners: 1, notes: 80 }], noteRate: 7.5 };
   assert.equal((await admin.put('/api/admin/surveys/s_test2', { survey: s2 })).status, 200);
-  for (const cl of [c, ...clients]) await cl.post('/api/surveys/s_test2/submit', { answers: { q0: 'x' } });
-  const big1 = await admin.post('/api/admin/surveys/s_test2/draw', { gbRate: 7.5 }); assert.equal(big1.status, 200); assert.equal(big1.body.winners[0].estValue, 600);
-  const bigWinner = big1.body.winners[0].participantId; const bw = db.get('SELECT email, phone FROM participants WHERE id = ?', bigWinner);
-  const bc = new Client(); const st = await bc.post('/api/auth/start', { mode: 'login', email: bw.email, phone: bw.phone }); await bc.post('/api/auth/verify', { code: st.body.devCode });
   assert.equal((await admin.put('/api/admin/surveys/s_test3', { survey: s2 })).status, 200);
-  assert.equal((await bc.post('/api/surveys/s_test3/submit', { answers: { q0: 'x' } })).status, 200);
-  const capped = await admin.post('/api/admin/surveys/s_test3/draw', { gbRate: 7.5 });
-  assert.equal(capped.body.code, 'empty'); assert.match(capped.body.error, /1 skipped by the \$999/);
-  const over = await admin.post('/api/admin/surveys/s_test3/draw', { gbRate: 20 }); assert.equal(over.body.code, 'over_cap', '80 notes at $20 = $1,600 > $999');
+  for (const cl of [c, ...clients]) for (const id of ['s_test2', 's_test3']) assert.ok([200, 409].includes((await cl.post(`/api/surveys/${id}/submit`, { answers: { q0: 'x' } })).status)); // c may be one of clients
+  const big1 = await admin.post('/api/admin/surveys/s_test2/draw', {}); assert.equal(big1.status, 200); assert.equal(big1.body.winners[0].estValue, 600);
+  const bigWinner = big1.body.winners[0].participantId;
+  let big2 = await admin.post('/api/admin/surveys/s_test3/draw', {}); assert.equal(big2.status, 200);
+  for (let k = 0; k < 8; k++) { // repeat the draw: the $600 winner is never picked
+    assert.notEqual(big2.body.winners[0].participantId, bigWinner);
+    db.run('DELETE FROM winners WHERE survey_id = ?', 's_test3'); big2 = await admin.post('/api/admin/surveys/s_test3/draw', {}); }
+  // and can't enter another $600 survey at all
+  assert.equal((await admin.put('/api/admin/surveys/s_test4', { survey: s2 })).status, 200);
+  const bw = db.get('SELECT email, phone FROM participants WHERE id = ?', bigWinner);
+  const bc = new Client(); const st = await bc.post('/api/auth/start', { mode: 'login', email: bw.email, phone: bw.phone }); await bc.post('/api/auth/verify', { code: st.body.devCode });
+  const open4 = await bc.get('/api/surveys/s_test4'); assert.equal(open4.status, 403); assert.equal(open4.body.code, 'limit');
+  assert.equal((await bc.put('/api/surveys/s_test4/draft', { answers: { q0: 'x' } })).body.code, 'limit');
+  const sub4 = await bc.post('/api/surveys/s_test4/submit', { answers: { q0: 'x' } }); assert.equal(sub4.body.code, 'limit');
+  const meB = await bc.get('/api/me'); assert.ok(meB.body.limits.s_test4 && meB.body.limits.s_test4.until, 'app is told when they can enter again');
+  assert.equal(meB.body.limits[surveyId], undefined);
+  assert.ok(!JSON.stringify(meB.body).includes('600'), 'no dollar amounts sent to the participant');
+  // the value is locked once people have entered
+  assert.equal((await admin.put('/api/admin/surveys/s_test2', { survey: { ...s2, noteRate: 1 } })).body.survey.noteRate, 7.5);
 });
 
 test('campaign respects opt-in and language; unsubscribe link works', async () => {

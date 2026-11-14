@@ -4,7 +4,7 @@ import { config } from './config.js';
 import { all, get, run, tx, rowParticipant, rowSurvey, rowResponse, rowWinner, saveParticipant, saveWinner, getSetting, audit } from './db.js';
 import { HttpError, bad, newId, sha256, sixDigits, jsonBody, sendJson, createSession, readSession, endSession, rateLimit, clientIp, safeEqual } from './http.js';
 import { T as MSG, sendBoth, queueSms, queueEmail, checkUnsubToken } from './messaging.js';
-import { STATES, normPhone, emailOk, maskPhone, maskEmail, localDay, addDays, wStatus, cleanAnswers, L, winnersCountOf, tiersOf, noteOzOf, notesOf, winnerGoldOz, surveyPrizeShort } from '../public/js/shared.js';
+import { STATES, normPhone, emailOk, maskPhone, maskEmail, localDay, addDays, wStatus, cleanAnswers, L, winnersCountOf, tiersOf, noteOzOf, notesOf, winnerGoldOz, surveyPrizeShort, topPrizeValue, WIN_CAP } from '../public/js/shared.js';
 
 const today = () => localDay(Date.now(), config.timeZone);
 const PENDING_SECONDS = 15 * 60;
@@ -56,6 +56,20 @@ function meView(p) {
 /* What anyone may see about a winner */
 function publicWinner(w) {
   return { firstName: w.firstName, lastInitial: w.lastInitial, state: w.state, place: w.place || 1, notes: notesOf(w), noteOz: noteOzOf(w), goldOz: winnerGoldOz(w), date: w.date };
+}
+/* Yearly limit: a person can enter a survey only if winning its top prize would keep their prizes from the last 12 months at or under $WIN_CAP.
+   Returns null if they can enter, or { until } = the first day they can enter again. Values never leave the server. */
+function yearlyLimit(pid, s, asOf = today()) {
+  const top = topPrizeValue(s); if (!top) return null;
+  const wins = all(`SELECT draw_date, est_value FROM winners WHERE participant_id = ? AND status != 'forfeited' AND draw_date > ? AND draw_date <= ? ORDER BY draw_date`, pid, addDays(asOf, -365), asOf);
+  let total = wins.reduce((a, w) => a + (w.est_value || 0), 0);
+  if (total + top <= WIN_CAP) return null;
+  for (const w of wins) { total -= w.est_value || 0; if (total + top <= WIN_CAP) return { until: addDays(w.draw_date, 365) }; }
+  return { until: null };
+}
+function assertUnderLimit(p, s) {
+  const lim = yearlyLimit(p.id, s);
+  if (lim) throw new HttpError(403, `You've reached the yearly prize limit of $${WIN_CAP} in 12 months, so you can't enter this survey${lim.until ? ` until ${lim.until}` : ' right now'}.`, { code: 'limit', until: lim.until });
 }
 function publicSurvey(s, withQuestions) {
   const { id, title, title_es, description, description_es, endsAt, drawDate, status, questions } = s;
@@ -173,7 +187,12 @@ export function participantRoutes(r) {
     const surveyTitles = {};
     for (const x of responses) { const s = surveyById(x.surveyId); if (s) surveyTitles[s.id] = { title: s.title, title_es: s.title_es }; }
     const campaigns = p.optIn ? all('SELECT * FROM campaigns WHERE sent_at >= ? ORDER BY sent_at DESC LIMIT 20', (p.createdAt || 0) - 30 * 864e5).map(c => { const d = JSON.parse(c.data); return { id: c.id, title: d.title, title_es: d.title_es, message: d.message, message_es: d.message_es, surveyId: d.surveyId, sentAt: c.sent_at }; }) : [];
-    sendJson(res, 200, { me: meView(p), responses, wins, campaigns, surveyTitles });
+    const limits = {};
+    for (const s of all("SELECT * FROM surveys WHERE status = 'live'").map(rowSurvey).filter(isLive)) {
+      if (responses.some(x => x.surveyId === s.id && x.status === 'submitted')) continue;
+      const lim = yearlyLimit(p.id, s); if (lim) limits[s.id] = { until: lim.until };
+    }
+    sendJson(res, 200, { me: meView(p), responses, wins, campaigns, surveyTitles, limits, winCap: WIN_CAP });
   });
 
   r.put('/api/me/profile', async (req, res) => {
@@ -230,6 +249,9 @@ export function participantRoutes(r) {
   r.get('/api/surveys/:id', async (req, res, { params }) => {
     requireParticipant(req);
     const s = surveyById(params.id); if (!isLive(s)) throw new HttpError(404, 'This survey is closed.', { code: 'closed' });
+    const p = requireParticipant(req);
+    const mine = get("SELECT status FROM responses WHERE survey_id = ? AND participant_id = ?", s.id, p.id);
+    if (!mine || mine.status !== 'submitted') assertUnderLimit(p, s);
     sendJson(res, 200, { survey: publicSurvey(s, true) });
   });
   r.put('/api/surveys/:id/draft', async (req, res, { params }) => {
@@ -237,6 +259,7 @@ export function participantRoutes(r) {
     const s = surveyById(params.id); if (!isLive(s)) throw new HttpError(404, 'This survey is closed.', { code: 'closed' });
     const id = s.id + '__' + p.id; const prev = rowResponse(get('SELECT * FROM responses WHERE id = ?', id));
     if (prev && prev.status === 'submitted') throw new HttpError(409, "You're already entered", { code: 'already' });
+    assertUnderLimit(p, s);
     const { answers } = cleanAnswers(s, b.answers); const now = Date.now();
     run(`INSERT INTO responses (id, survey_id, participant_id, email, phone, status, answers, lang, started_at, updated_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET answers = excluded.answers, lang = excluded.lang, updated_at = excluded.updated_at`, id, s.id, p.id, p.email, p.phone, JSON.stringify(answers), b.lang === 'es' ? 'es' : 'en', now, now);
@@ -247,6 +270,7 @@ export function participantRoutes(r) {
     const s = surveyById(params.id); if (!isLive(s)) throw new HttpError(404, 'Sorry, this survey has closed.', { code: 'closed' });
     const { answers, missing } = cleanAnswers(s, b.answers);
     if (missing.length) throw bad(`Please answer ${missing.length} required question${missing.length > 1 ? 's' : ''} before submitting.`, { code: 'missing', missing });
+    assertUnderLimit(p, s);
     const lang = b.lang === 'es' ? 'es' : 'en'; const id = s.id + '__' + p.id; const now = Date.now(); const entryNo = entryNumber();
     tx(() => {
       // Rule: one entry per survey per email address and per phone number

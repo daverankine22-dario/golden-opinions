@@ -190,3 +190,8 @@ export function surveyProblems(s) {
   if (s.drawDate && s.endsAt && s.drawDate < s.endsAt) errs.push('The drawing date should be on or after the end date.');
   return errs;
 }
+
+/* the dollar value of one Gold Note, set on the survey when it is created (internal; never shown to participants) */
+export const surveyRateOf = s => (s && Number(s.noteRate) > 0 ? +s.noteRate : 0);
+/* the largest single prize in a survey, in dollars at the survey's rate: what a person must have room for under the yearly limit to enter */
+export const topPrizeValue = (s, rate = surveyRateOf(s)) => { const t = tiersOf(s); return rate && t.length ? estValue(Math.max(...t.map(x => x.notes)), rate) : 0; };

@@ -28,7 +28,7 @@ export const I18N={
 'Enter your 6-digit code':'Escribe tu código de 6 dígitos','Verify & continue':'Verificar y continuar',"That code doesn't match. Check it and try again.":'Ese código no coincide. Revísalo e inténtalo de nuevo.',
 'Messages':'Mensajes','Settings':'Configuración','Take it now →':'Responder ahora →','Open survey →':'Abrir encuesta →','Pick a questionnaire':'Elige un cuestionario',
 "Finish a survey to be entered into that survey's gold draw. One entry per person per survey.":'Completa una encuesta para participar en su sorteo de oro. Una participación por persona en cada encuesta.',
-'New':'Nueva','✓ Entered':'✓ Participando','Draft saved':'Borrador guardado','on drawing day':'el día del sorteo',
+'New':'Nueva','✓ Entered':'✓ Participando','🔒 Limit reached':'🔒 Límite alcanzado','Draft saved':'Borrador guardado','on drawing day':'el día del sorteo',
 'Alert me by text & email when new surveys go live':'Avísame por mensaje de texto y correo cuando haya nuevas encuestas','Account settings':'Configuración de la cuenta',
 "No surveys are open right now. We'll let you know when the next one goes live.":'No hay encuestas abiertas en este momento. Te avisaremos cuando haya una nueva.',
 "No surveys are open right now. We'll let you know when the next one goes live — turn on alerts below.":'No hay encuestas abiertas en este momento. Te avisaremos cuando haya una nueva — activa las alertas abajo.',

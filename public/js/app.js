@@ -343,13 +343,15 @@ function viewHome(){
   const banner=latestC&&!seen.includes('c'+latestC.id)&&pubSurvey(latestC.surveyId)?`<div class="goldcard" style="margin-bottom:14px"><div style="font-weight:900;font-size:16px">📣 ${esc(latestC.title)}</div><div class="muted small" style="margin-top:4px">${esc(latestC.message)}</div><div style="margin-top:10px"><button class="btn sm" style="border-color:#7a4b00;color:#3a2500" data-act="open" data-id="${esc(latestC.surveyId)}" data-seen="c${esc(latestC.id)}">Take it now →</button></div></div>`:'';
   const cards=list.map(s=>{
     const r=myResp(s.id);
-    const st=r&&r.status==='submitted'?'<span class="chip ok">✓ Entered</span>':r?'<span class="chip warn">Draft saved</span>':'<span class="chip">New</span>';
+    const lim=!(r&&r.status==='submitted')&&limitOf(s.id);
+    const st=r&&r.status==='submitted'?'<span class="chip ok">✓ Entered</span>':lim?'<span class="chip off">🔒 Limit reached</span>':r?'<span class="chip warn">Draft saved</span>':'<span class="chip">New</span>';
     const mins=Math.max(1,Math.round(s.questionCount*0.4));
     return `<button class="card survey" data-act="open" data-id="${esc(s.id)}">
       <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><h3 style="margin:0" class="notr">${esc(L(s,'title'))}</h3>${st}</div>
       <div class="muted small notr" style="margin-top:6px">${esc(L(s,'description')||'')}</div>
       <div class="meta"><span class="chip">${s.questionCount} questions</span><span class="chip">~${mins} min</span>${tiersOf(s).length?`<span class="chip warn notr">🏆 ${esc(surveyPrizeShort(s))}</span>`:''}${s.endsAt?`<span class="chip off">Ends ${dayFmt(s.endsAt)}</span>`:''}${drawDateOf(s)?`<span class="chip off">Drawing ${dayFmt(drawDateOf(s))}</span>`:''}</div>
       ${tiersOf(s).length?`<div class="tiers notr">${prizeList(s)}</div>`:''}
+      ${lim?`<div class="faint small notr" style="margin-top:10px">🔒 ${esc(limitText(lim))}</div>`:''}
     </button>`}).join('');
   return `<div class="wrap">
   <div class="topbar"><img src="${LOGO}" alt="Golden Opinions"><div style="display:flex;gap:8px;align-items:center">${langToggle()}<button class="iconbtn" data-act="inbox" aria-label="Messages">✉️${n?`<span class="badge">${n}</span>`:''}</button><button class="iconbtn" data-act="settings" aria-label="Settings" title="Settings">⚙️</button></div></div>
@@ -464,12 +466,24 @@ rules:['Official Rules',`
 /* ---------- admin ---------- */
 
 /* ---------- taking a survey ---------- */
+/* yearly prize limit: the server says which surveys this person can't enter yet (no dollar amounts are sent) */
+const limitOf = sid => ((S.my && S.my.limits) || {})[sid];
+function limitText(lim) {
+  const cap = (S.my && S.my.winCap) || WIN_CAP;
+  return lim && lim.until
+    ? T(`You've reached the yearly prize limit ($${cap} in any 12 months), so you can't enter this survey until ${dayFmt(lim.until)}.`, `Alcanzaste el límite anual de premios ($${cap} en 12 meses), así que no puedes participar en esta encuesta hasta el ${dayFmt(lim.until)}.`)
+    : T(`You've reached the yearly prize limit ($${cap} in any 12 months), so you can't enter this survey right now.`, `Alcanzaste el límite anual de premios ($${cap} en 12 meses), así que no puedes participar en esta encuesta por ahora.`);
+}
+function showLimit(lim) { showModal(`<h2>${T('Yearly prize limit reached', 'Límite anual de premios alcanzado')}</h2><p class="muted notr">${esc(limitText(lim))}</p><p class="faint small notr">${T('This rule is in the Official Rules and keeps prizes fair for everyone. Congratulations on your wins!', 'Esta regla está en el Reglamento oficial y mantiene los premios justos para todos. ¡Felicidades por tus premios!')}</p><button class="btn gold block" data-act="closemodal">OK</button>`); }
 async function startSurvey(sid) {
   const p = me(); if (!p) { S.authMode = 'login'; go('login'); return; }
   const r = myResp(sid); const s0 = pubSurvey(sid) || {};
   if (r && r.status === 'submitted') { showModal(`<h2>You're already entered</h2><p class="muted">You completed "<span class="notr">${esc(L(s0, 'title'))}</span>" on ${fmtDate(r.submittedAt)}. Each person can enter each survey once. Entry #${esc(r.entryNo)}.</p><button class="btn gold block" data-act="closemodal">OK</button>`); return; }
+  if (limitOf(sid)) { showLimit(limitOf(sid)); return; }
   await busy(async () => {
-    const { survey } = await api('GET', '/api/surveys/' + encodeURIComponent(sid));
+    let survey;
+    try { ({ survey } = await api('GET', '/api/surveys/' + encodeURIComponent(sid))); }
+    catch (e) { if (e.code === 'limit') { await loadMe(); showLimit({ until: e.until }); return; } throw e; }
     S.cur = { sid, survey, answers: r && r.answers ? JSON.parse(JSON.stringify(r.answers)) : {}, i: 0 };
     if (r) { const qs = survey.questions || []; const k = qs.findIndex(q => !answered(q, S.cur.answers[q.id])); S.cur.i = k < 0 ? qs.length - 1 : k; }
     go('take');
@@ -513,7 +527,7 @@ const ACT = {
   exitTake() { go('home'); },
   async saveExit() {
     const c = S.cur;
-    await busy(async () => { await api('PUT', `/api/surveys/${encodeURIComponent(c.sid)}/draft`, { answers: c.answers, lang: curLang() }); await loadMe(); toast('Draft saved — finish it any time before the survey ends'); go('home'); });
+    await busy(async () => { try { await api('PUT', `/api/surveys/${encodeURIComponent(c.sid)}/draft`, { answers: c.answers, lang: curLang() }); } catch (e) { if (e.code === 'limit') { await loadMe(); go('home'); showLimit({ until: e.until }); return; } throw e; } await loadMe(); toast('Draft saved — finish it any time before the survey ends'); go('home'); });
   },
   async submit() {
     const c = S.cur;
@@ -522,6 +536,7 @@ const ACT = {
         const r = await api('POST', `/api/surveys/${encodeURIComponent(c.sid)}/submit`, { answers: c.answers, lang: curLang() });
         S.lastEntry = { entryNo: r.entryNo }; await loadMe(); go('done');
       } catch (e) {
+        if (e.code === 'limit') { await loadMe(); showLimit({ until: e.until }); return; }
         if (e.code === 'already') { showModal(`<h2>Already entered</h2><p class="muted">${esc(trStr(e.message))}</p><button class="btn gold block" data-act="closemodal">OK</button>`); return; }
         throw e;
       }

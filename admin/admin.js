@@ -1,6 +1,6 @@
 // Golden Opinions — admin console (staff only). Served at /admin; talks to /api/admin/*.
 import * as sh from '/js/shared.js';
-import { STATES, TYPES, LIKERT, LIKERT_ES, WIN_CAP, POOL_CAP, CLAIM_DAYS, G_PER_OZ, DEFAULT_NOTE_OZ, PLACES, W_STATUS, fmtUSD, fmtPhone, fmtNum, fmtOz, winnerLabel, placeLabel, tiersOf, noteOzOf, notesOf, goldOzOf, winnerGoldOz, totalNotesOf, poolValue, surveyPrizeShort, tierPrize, shortPrize, winnersCountOf, answered, likertLabels, newQuestion, addDays, estValue, withUnit, L as Lsh } from '/js/shared.js';
+import { STATES, TYPES, LIKERT, LIKERT_ES, WIN_CAP, POOL_CAP, CLAIM_DAYS, G_PER_OZ, DEFAULT_NOTE_OZ, PLACES, W_STATUS, fmtUSD, fmtPhone, fmtNum, fmtOz, winnerLabel, placeLabel, tiersOf, noteOzOf, surveyRateOf, topPrizeValue, notesOf, goldOzOf, winnerGoldOz, totalNotesOf, poolValue, surveyPrizeShort, tierPrize, shortPrize, winnersCountOf, answered, likertLabels, newQuestion, addDays, estValue, withUnit, L as Lsh } from '/js/shared.js';
 import { esc, qInput } from '/js/ui.js';
 
 const LOGO = '/img/logo.webp';
@@ -25,6 +25,7 @@ const surveys = () => vals(S.data.surveys).sort((a, b) => (b.createdAt || 0) - (
 const liveSurveys = () => surveys().filter(s => s.status === 'live' && (!s.endsAt || s.endsAt >= S.today));
 const respsFor = sid => vals(S.data.responses).filter(r => r.surveyId === sid);
 const submittedFor = sid => respsFor(sid).filter(r => r.status === 'submitted');
+const entryCount = sid => submittedFor(sid).length;
 const winners = () => vals(S.data.winners).sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.notifiedAt || 0) - (a.notifiedAt || 0));
 const statusChipW = w => { const [c, l] = W_STATUS[wStatus(w)]; return `<span class="chip ${c}">${l}</span>`; };
 const gbRate = () => { const g = (S.data.settings || {}).goldback; return g && g.rate > 0 ? g : null; };
@@ -87,7 +88,10 @@ function prizeTable(s){
     <td><input class="in" type="number" min="0" max="1000" step="1" data-tier="${t.place}" data-tk="winners" value="${t.winners}" style="max-width:110px;padding:8px 10px"></td>
     <td><input class="in" type="number" min="0" max="10000" step="1" data-tier="${t.place}" data-tk="notes" value="${t.notes}" style="max-width:110px;padding:8px 10px"></td>
     <td class="tgold" data-pl="${t.place}">—</td></tr>`).join('');
-  return `<div class="grid2" style="grid-template-columns:1fr 2fr"><div><label class="f">Gold in each Gold Note (oz)</label><input class="in" type="number" min="0" step="0.0001" data-ef="noteOz" value="${esc(s.noteOz)}"></div><div class="faint small" style="align-self:end;padding-bottom:10px">Default from Overview. Participants see gold amounts only, never dollar values. Leave a place at 0 winners to skip it.</div></div>
+  const locked = s.noteRate && entryCount(s.id) > 0;
+  return `<div class="grid2"><div><label class="f">Gold in each Gold Note (oz)</label><input class="in" type="number" min="0" step="0.0001" data-ef="noteOz" value="${esc(s.noteOz)}"></div>
+    <div><label class="f">Value of one Gold Note today ($) — internal</label><input class="in" type="number" min="0" step="0.01" data-ef="noteRate" value="${esc(s.noteRate||'')}" placeholder="e.g. 7.50" ${locked?'disabled':''}></div></div>
+  <div class="faint small" style="margin-top:6px">${locked?`Value locked at <b>${fmtUSD(s.noteRate)}</b> per note (set ${esc(s.rateDate||'')}) because people have entered — everyone is checked against the same value.`:`Enter the value on the day you create the survey; it's dated and locked once the first person enters. It's never shown to participants. When someone opens this survey, we check that winning the top prize would keep them within $${WIN_CAP} in 12 months — if not, they can't enter.`} Participants see gold amounts only. Leave a place at 0 winners to skip it.</div>
   <div class="tscroll" style="margin-top:10px"><table class="t"><tr><th>Place</th><th>Number of winners</th><th>Gold Notes each</th><th>Each winner receives</th></tr>${rows}</table></div>
   <div class="small" id="poolLine" style="margin-top:8px"></div>`;
 }
@@ -95,12 +99,12 @@ function setTier(el){ const t=S.edit.tiers.find(x=>x.place===+el.dataset.tier); 
 function poolPrev(){
   if(!S.edit||!$('#poolLine')) return; const s=S.edit; const oz=noteOzOf(s);
   document.querySelectorAll('.tgold').forEach(td=>{const t=(s.tiers||[]).find(x=>+x.place===+td.dataset.pl)||{};const n=parseInt(t.notes)||0;td.textContent=n&&(parseInt(t.winners)||0)?`${fmtOz(goldOzOf(n,oz))} of gold`:'—'});
-  const w=winnersCountOf(s), notes=totalNotesOf(s), r=(gbRate()||{}).rate;
+  const w=winnersCountOf(s), notes=totalNotesOf(s), r=Number(s.noteRate)||0;
   let html=`Total: <b>${w} winner${w===1?'':'s'}</b> · <b>${notes} Gold Note${notes===1?'':'s'}</b> · <b>${fmtOz(goldOzOf(notes,oz))} of gold</b>`;
-  if(r){ const pv=poolValue(s,r); html+=` <span class="faint">· internal value ≈ ${fmtUSD(pv)}</span>`;
-    if(pv>POOL_CAP) html+=`<div class="err">Over the $${POOL_CAP.toLocaleString()} prize limit per survey at today's internal rate. Use fewer winners or fewer Gold Notes.</div>`;
-    const over=tiersOf(s).find(t=>estValue(t.notes,r)>WIN_CAP); if(over) html+=`<div class="err">${placeLabel(over.place)} is worth about ${fmtUSD(estValue(over.notes,r))} at today's internal rate — over the $${WIN_CAP} a person can win in 12 months.</div>`;
-  } else html+=`<div class="note" style="margin-top:8px">Set the internal Gold Note rate on the Overview tab so the $${WIN_CAP} and $${POOL_CAP.toLocaleString()} limits can be checked.</div>`;
+  if(r){ const pv=poolValue(s,r); html+=` <span class="faint">· internal value ≈ ${fmtUSD(pv)} · top prize ≈ ${fmtUSD(topPrizeValue(s,r))}</span>`;
+    if(pv>POOL_CAP) html+=`<div class="err">Over the $${POOL_CAP.toLocaleString()} prize limit per survey at this value. Use fewer winners or fewer Gold Notes.</div>`;
+    const over=tiersOf(s).find(t=>estValue(t.notes,r)>WIN_CAP); if(over) html+=`<div class="err">${placeLabel(over.place)} is worth about ${fmtUSD(estValue(over.notes,r))} at this value — over the $${WIN_CAP} a person can win in 12 months.</div>`;
+  } else html+=`<div class="note" style="margin-top:8px">Enter today's value of one Gold Note above. It's required before the survey goes live, so each person's $${WIN_CAP} yearly limit can be checked when they enter.</div>`;
   $('#poolLine').innerHTML=html;
 }
 /* winner form: place, notes, gold per note */
@@ -134,13 +138,11 @@ function viewAdmin(){
 }
 function goldPriceCard(){
   const g=gbRate(); const oz=noteOzDefault();
-  return `<div class="grid2" style="margin-bottom:16px">
+  return `<div style="margin-bottom:16px">
   <form id="noteForm" class="card" style="margin:0"><h3 style="margin:0">Gold Note size</h3>
     <div class="faint small" style="margin-top:4px">How much gold is in each Gold Note. New surveys start with this amount; each survey keeps the size it was saved with.</div>
     <div class="toolbar" style="margin:12px 0 0"><input class="in" name="noteOz" type="number" min="0" step="0.0001" value="${esc(oz)}" style="max-width:160px"><span class="muted small">oz per Gold Note</span><button class="btn gold sm" type="submit">Save</button></div></form>
-  <form id="priceForm" class="card" style="margin:0"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><h3 style="margin:0">Internal Gold Note rate</h3>${g?`<span class="chip ok">${fmtUSD(g.rate)} per note · ${fmtDT(g.updatedAt)}</span>`:'<span class="chip warn">Not set — draws are blocked</span>'}</div>
-    <div class="faint small" style="margin-top:4px">Never shown to participants. Used only to apply the $${WIN_CAP} / 12-month limit and the $${POOL_CAP.toLocaleString()} per-survey cap, and to record each prize's value. Update it on each drawing day.</div>
-    <div class="toolbar" style="margin:12px 0 0"><span style="font-weight:800">$</span><input class="in" name="price" type="number" min="0" step="0.01" placeholder="Value of one Gold Note" value="${g?esc(g.rate):''}" style="max-width:160px"><span class="muted small">per Gold Note</span><button class="btn gold sm" type="submit">Save</button></div></form>
+
   </div>`;
 }
 function adOverview(){
@@ -376,7 +378,7 @@ function winnerForm(w){
   <div class="goldcard" style="margin-top:12px;padding:10px 14px"><div class="muted tiny" style="font-weight:700">Shown publicly as</div><div id="wprev" style="font-weight:900;font-size:18px">${esc(winnerLabel({firstName:w.firstName||'—',lastInitial:w.lastInitial,state:w.state}))}</div></div>
   ${winnerPrizeFields(w)}
   <div class="grid2"><div><label class="f">Drawing date</label><input class="in" name="date" type="date" value="${esc(w.date||new Date().toISOString().slice(0,10))}"></div>
-  <div><label class="f">Internal rate that day ($ per note)</label><input class="in" name="gbRate" type="number" min="0" step="0.01" value="${esc(w.gbRate||(gbRate()||{}).rate||'')}" placeholder="for the $999 limit"></div></div>
+  <div><label class="f">Gold Note value ($ per note) — internal</label><input class="in" name="gbRate" type="number" min="0" step="0.01" value="${esc(w.gbRate||surveyRateOf(S.data.surveys[w.surveyId])||(gbRate()||{}).rate||'')}" placeholder="for the $999 limit"></div></div>
   ${w.participantId&&(!S.data.winners[w.id]||wStatus(w)==='notified')?`<label class="f">Claim deadline</label><input class="in" name="claimDeadline" type="date" value="${esc(w.claimDeadline||addDays(localDay(),CLAIM_DAYS))}">`:''}
   <div style="display:flex;gap:10px;margin-top:18px">${S.data.winners[w.id]?'<button type="button" class="btn danger" data-act="delWinner">Delete</button>':''}<span style="flex:1"></span><button type="button" class="btn" data-act="closemodal">Cancel</button><button class="btn gold" type="submit">Save</button></div></form>`;
 }
@@ -395,7 +397,7 @@ function adParticipants(){
 function sampleSurvey(){
   const Q=(t,o)=>Object.assign(newQuestion(t),o);
   const end=new Date(Date.now()+30*864e5).toISOString().slice(0,10);
-  return {id:'s'+uid(),title:'Everyday Shopping Habits',title_es:'Hábitos de compra diarios',description:'Tell us how you shop for groceries and household items. Takes about 3 minutes.',description_es:'Cuéntanos cómo compras alimentos y artículos para el hogar. Toma unos 3 minutos.',tiers:[{place:1,winners:1,notes:10},{place:2,winners:5,notes:5},{place:3,winners:20,notes:1}],noteOz:noteOzDefault(),endsAt:end,status:'live',createdAt:Date.now(),questions:[
+  return {id:'s'+uid(),title:'Everyday Shopping Habits',title_es:'Hábitos de compra diarios',description:'Tell us how you shop for groceries and household items. Takes about 3 minutes.',description_es:'Cuéntanos cómo compras alimentos y artículos para el hogar. Toma unos 3 minutos.',tiers:[{place:1,winners:1,notes:10},{place:2,winners:5,notes:5},{place:3,winners:20,notes:1}],noteOz:noteOzDefault(),noteRate:(gbRate()||{}).rate||'',endsAt:end,status:'live',createdAt:Date.now(),questions:[
     Q('single',{text:'Where do you do most of your grocery shopping?',text_es:'¿Dónde haces la mayoría de tus compras de alimentos?',options:['Supermarket','Warehouse club','Discount store','Online delivery','Farmers market'],options_es:['Supermercado','Club de almacén','Tienda de descuento','Entrega en línea','Mercado de agricultores']}),
     Q('multi',{text:'Which of these did you buy online in the last month?',text_es:'¿Cuáles de estos compraste en línea el último mes?',options:['Groceries','Household supplies','Clothing','Electronics','Personal care','Pet supplies'],options_es:['Alimentos','Artículos para el hogar','Ropa','Electrónicos','Cuidado personal','Artículos para mascotas'],max:3}),
     Q('dropdown',{text:'Which state do you live in?',text_es:'¿En qué estado vives?',options:[...STATES]}),
@@ -413,7 +415,7 @@ const ACT = {
   async logout() { await busy(async () => { await api('POST', '/api/admin/logout'); S.view = 'login'; S.login = {}; render(); }); },
   loginBack() { S.login = { email: S.login.email }; render(); },
   atab(t) { S.adminTab = t.dataset.k; S.expanded = null; render(); window.scrollTo(0, 0); },
-  newSurvey() { S.edit = { id: 's_' + uid(), title: '', description: '', tiers: [{ place: 1, winners: 1, notes: 10 }, { place: 2, winners: 0, notes: 0 }, { place: 3, winners: 0, notes: 0 }], noteOz: noteOzDefault(), endsAt: '', status: 'draft', questions: [newQuestion('single')] }; S.adminTab = 'build'; render(); },
+  newSurvey() { S.edit = { id: 's_' + uid(), title: '', description: '', tiers: [{ place: 1, winners: 1, notes: 10 }, { place: 2, winners: 0, notes: 0 }, { place: 3, winners: 0, notes: 0 }], noteOz: noteOzDefault(), noteRate: (gbRate() || {}).rate || '', endsAt: '', status: 'draft', questions: [newQuestion('single')] }; S.adminTab = 'build'; render(); },
   editSurvey(t) { S.edit = ensureTiers(JSON.parse(JSON.stringify(S.data.surveys[t.dataset.id]))); S.adminTab = 'build'; render(); window.scrollTo(0, 0); },
   dupSurvey(t) { const s = JSON.parse(JSON.stringify(S.data.surveys[t.dataset.id])); s.id = 's_' + uid(); s.title += ' (copy)'; s.status = 'draft'; delete s.createdAt; s.questions.forEach(q => q.id = 'q' + uid()); S.edit = s; S.adminTab = 'build'; render(); toast('Copy created — save to keep it'); },
   async sample() { const s = sampleSurvey(); await busy(async () => { await api('PUT', '/api/admin/surveys/' + s.id, { survey: s }); await loadData(); S.adminTab = 'surveys'; render(); toast('Sample survey added and set live'); }); },
@@ -449,7 +451,7 @@ const ACT = {
       <p class="muted small">Winners are picked at random on the server from eligible entries in "${esc(s.title)}": 1st place first, then 2nd, then 3rd. No one wins twice, and anyone a prize would put over the $${WIN_CAP} / 12-month limit is skipped. Each winner is notified by text and email right away.</p></div>
       <form id="drawForm"><table class="t"><tr><th>Place</th><th>Spots to fill</th><th>Each receives</th></tr>${open.map(x => `<tr><td>${placeLabel(x.place)}</td><td>${x.need}</td><td>${esc(tierPrize(x, noteOzOf(s)))}</td></tr>`).join('')}</table>
         <div class="grid2"><div><label class="f">Drawing date</label><input class="in" name="date" type="date" value="${S.today}"></div><div><label class="f">Claim deadline</label><input class="in" name="claimDeadline" type="date" value="${addDays(S.today, CLAIM_DAYS)}"></div></div>
-        <label class="f">Internal Gold Note rate on drawing day ($ per note)</label><input class="in" name="gbRate" type="number" min="0" step="0.01" value="${esc(rate)}" placeholder="for the $999 limit"><div class="faint tiny" style="margin-top:4px">Used for the $${WIN_CAP} limit and prize records only; never shown to participants.</div>
+        <div class="faint tiny" style="margin-top:8px">Prize values for the $${WIN_CAP} limit use this survey's Gold Note value: <b>${surveyRateOf(s)?fmtUSD(surveyRateOf(s))+' per note'+(s.rateDate?' (set '+esc(s.rateDate)+')':''):'not set'}</b>.</div>
         <div style="display:flex;gap:10px;margin-top:16px"><span style="flex:1"></span><button type="button" class="btn" data-act="closemodal">Cancel</button><button class="btn gold" type="submit">Draw &amp; notify</button></div></form>`);
   },
   wfilter(t) { S.wf = t.dataset.k; render(); },
@@ -487,7 +489,7 @@ document.addEventListener('input', e => {
   if (t.dataset.gprev && !t.dataset.ef) { gPrev(t); return; }
   if (t.dataset.bind) { const k = t.dataset.bind; S[k] = t.value; const pos = t.selectionStart; render(); const n = document.querySelector(`[data-bind="${k}"]`); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (_) { } } return; }
   if (t.dataset.tier) { setTier(t); poolPrev(); return; }
-  if (t.dataset.ef && t.type !== 'checkbox') { S.edit[t.dataset.ef] = t.value; if (t.dataset.gprev) gPrev(t); if (t.dataset.ef === 'noteOz') poolPrev(); return; }
+  if (t.dataset.ef && t.type !== 'checkbox') { S.edit[t.dataset.ef] = t.value; if (t.dataset.gprev) gPrev(t); if (t.dataset.ef === 'noteOz' || t.dataset.ef === 'noteRate') poolPrev(); return; }
   if (t.dataset.qf && t.type !== 'checkbox' && t.tagName !== 'SELECT') { setQF(t); return; }
   if (t.dataset.cf && t.type !== 'checkbox') { S.camp[t.dataset.cf] = t.value; const m = $('#cc'); if (m && t.dataset.cf === 'message') m.textContent = t.value.length + ' chars' + (t.value.length > 160 ? ' · over 1 SMS segment' : ''); return; }
 });
@@ -534,7 +536,7 @@ document.addEventListener('submit', async e => {
     const fd = new FormData(f); const s = S.data.surveys[S.reportId];
     await busy(async () => {
       try {
-        const r = await api('POST', `/api/admin/surveys/${encodeURIComponent(s.id)}/draw`, { date: fd.get('date'), claimDeadline: fd.get('claimDeadline'), gbRate: Number(fd.get('gbRate')) });
+        const r = await api('POST', `/api/admin/surveys/${encodeURIComponent(s.id)}/draw`, { date: fd.get('date'), claimDeadline: fd.get('claimDeadline'), });
         await loadData();
         showModal(`<h2>${r.winners.length} winner${r.winners.length === 1 ? '' : 's'} drawn &amp; notified ✓</h2>
           <p class="muted small">Picked at random from ${r.poolSize} eligible entr${r.poolSize === 1 ? 'y' : 'ies'}.${r.capped ? ` ${r.capped} skipped by the $${WIN_CAP} / 12-month limit.` : ''}${r.winners.length < r.requested ? ` Only ${r.winners.length} of ${r.requested} spots could be filled — draw again later to fill the rest.` : ''} Each winner got a text and an email and sees a "You won!" banner in the app.</p>

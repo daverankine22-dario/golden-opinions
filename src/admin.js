@@ -4,7 +4,7 @@ import { config } from './config.js';
 import { all, get, run, tx, rowParticipant, rowSurvey, rowResponse, rowWinner, saveSurvey, saveWinner, getSetting, setSetting, audit, parse } from './db.js';
 import { HttpError, bad, newId, sha256, sixDigits, jsonBody, sendJson, createSession, readSession, endSession, rateLimit, clientIp, checkPassword, safeEqual } from './http.js';
 import { T as MSG, queueEmail, queueSms, sendBoth } from './messaging.js';
-import { WIN_CAP, CLAIM_DAYS, STATES, localDay, addDays, wStatus, surveyProblems, estValue, prizeLabel, shortPrize, winnersCountOf, fmtPhone, answerText, L, tiersOf, noteOzOf, notesOf, goldOzOf, placeLabel, PLACES, DEFAULT_NOTE_OZ, POOL_CAP, poolValue, surveyPrizeShort, fmtOz, topGoldOz } from '../public/js/shared.js';
+import { WIN_CAP, CLAIM_DAYS, STATES, localDay, addDays, wStatus, surveyProblems, estValue, surveyRateOf, topPrizeValue, prizeLabel, shortPrize, winnersCountOf, fmtPhone, answerText, L, tiersOf, noteOzOf, notesOf, goldOzOf, placeLabel, PLACES, DEFAULT_NOTE_OZ, POOL_CAP, poolValue, surveyPrizeShort, fmtOz, topGoldOz } from '../public/js/shared.js';
 
 const today = () => localDay(Date.now(), config.timeZone);
 const dayRx = /^\d{4}-\d{2}-\d{2}$/;
@@ -98,12 +98,23 @@ export function adminRoutes(r) {
     for (const k of ['updatedAt', 'goldbacks', 'noteDenom', 'noteQty', 'goldAmt', 'goldUnit', 'winnersCount', 'prize']) delete clean[k];
     clean.winnersCount = winnersCountOf(clean); clean.prize = surveyPrizeShort(clean);
     for (const k of ['endsAt', 'drawDate']) if (clean[k] && !dayRx.test(clean[k])) clean[k] = '';
+    // Gold Note value ($ per note), entered when the survey is created. Locked once anyone has entered, so every entrant is checked against the same value.
+    const hasEntries = prev && get("SELECT 1 FROM responses WHERE survey_id = ? AND status = 'submitted' LIMIT 1", prev.id);
+    if (hasEntries && surveyRateOf(prev)) { clean.noteRate = prev.noteRate; clean.rateDate = prev.rateDate; }
+    else {
+      const v = Number(s.noteRate);
+      if (v > 0 && v < 10000) { clean.noteRate = +v.toFixed(2); clean.rateDate = prev && +prev.noteRate === clean.noteRate && prev.rateDate ? prev.rateDate : today(); }
+      else { delete clean.noteRate; delete clean.rateDate; }
+    }
     const errs = surveyProblems(clean);
-    const rate = (getSetting('goldback') || {}).rate;
-    if (rate && poolValue(clean, rate) > POOL_CAP) errs.push(`The total prize pool is worth about $${poolValue(clean, rate).toFixed(2)} at today's internal rate — over the $${POOL_CAP.toLocaleString()} limit per survey. Use fewer winners or fewer Gold Notes.`);
+    const rate = surveyRateOf(clean);
+    if (clean.status === 'live' && !rate) errs.push("Enter today's dollar value of one Gold Note before making the survey live. It's used to check each person's yearly prize limit when they enter.");
+    if (rate && topPrizeValue(clean) > WIN_CAP) errs.push(`The top prize is worth about $${topPrizeValue(clean).toFixed(2)} at $${rate} per Gold Note — more than the $${WIN_CAP} a person can win in 12 months. Use fewer Gold Notes.`);
+    if (rate && poolValue(clean, rate) > POOL_CAP) errs.push(`The total prize pool is worth about $${poolValue(clean, rate).toFixed(2)} at $${rate} per Gold Note — over the $${POOL_CAP.toLocaleString()} limit per survey. Use fewer winners or fewer Gold Notes.`);
     if (errs.length) throw bad(errs[0], { problems: errs });
     saveSurvey(clean);
-    audit(a.id, prev ? 'survey.update' : 'survey.create', { id: params.id, status: clean.status });
+    if (rate && (!prev || +prev.noteRate !== rate)) setSetting('goldback', { ...(getSetting('goldback') || {}), rate, updatedAt: Date.now() }); // remembered as the default for the next survey
+    audit(a.id, prev ? 'survey.update' : 'survey.create', { id: params.id, status: clean.status, noteRate: clean.noteRate });
     sendJson(res, 200, { ok: true, survey: surveyById(params.id) });
   });
   r.del('/api/admin/surveys/:id', async (req, res, { params }) => {
@@ -148,10 +159,10 @@ export function adminRoutes(r) {
     const a = requireAdmin(req); const b = await jsonBody(req);
     const date = dayRx.test(b.date || '') ? b.date : today();
     const deadline = dayRx.test(b.claimDeadline || '') ? b.claimDeadline : addDays(today(), CLAIM_DAYS);
-    const rate = Number(b.gbRate) || (getSetting('goldback') || {}).rate;
-    if (!(rate > 0)) throw bad(`Set the Gold Note rate first: the draw checks the $${WIN_CAP} limit per person over 12 months.`, { code: 'no_rate' });
     const result = tx(() => {
       const s = surveyById(params.id); if (!s) throw new HttpError(404, 'Survey not found');
+      const rate = surveyRateOf(s) || (getSetting('goldback') || {}).rate; // the value set when the survey was created
+      if (!(rate > 0)) throw bad(`Set this survey's Gold Note value first: the draw checks the $${WIN_CAP} limit per person over 12 months.`, { code: 'no_rate' });
       const tiers = tiersOf(s); const noteOz = noteOzOf(s);
       if (!tiers.length) throw bad('This survey has no prize places set.');
       const top = tiers.find(t => estValue(t.notes, rate) > WIN_CAP);
@@ -182,7 +193,7 @@ export function adminRoutes(r) {
       }
       const capped = [...skipped].filter(id => !used.has(id)).length;
       if (!saved.length) throw bad(capped ? `No eligible entries — ${capped} skipped by the $${WIN_CAP} / 12-month limit.` : 'There are no remaining entries to draw from.', { code: 'empty' });
-      audit(a.id, 'draw', { surveyId: s.id, poolSize: pool.length, capped, need: totalNeed, picks: saved.map(w => ({ response: w.responseId, place: w.place })), rate, date });
+      audit(a.id, 'draw', { surveyId: s.id, poolSize: pool.length, capped, need: totalNeed, picks: saved.map(w => ({ response: w.responseId, place: w.place })), rate: saved[0] && saved[0].gbRate, date });
       return { saved, poolSize: pool.length, capped, need: totalNeed };
     });
     for (const w of result.saved) notifyWinner(w, 'win');
