@@ -86,10 +86,9 @@ Log in at `https://admin.goldenopinions.com`: email + password, then the 6-digit
 
 ## 8. Drawing day
 
-1. **Draw winners** fills 1st place first, then 2nd, then 3rd.
-2. Open the survey's report → **Draw N winners** → check the date, rate and claim deadline → **Draw & notify**. Winners get a text and an email immediately; anyone who would exceed $999 in 12 months is skipped automatically.
-3. **Winners → To ship**: when someone claims, buy or pull the notes, ship them insured with tracking, then **Mark shipped** (the winner is notified).
-4. Reminders go out automatically on day 3 and day 7. After the deadline, **Draw alternate** fills the spot.
+1. Open the survey's report → **Draw N winners** → check the date and claim deadline → **Draw & notify**. Places are filled in order: 1st, then 2nd, then 3rd. Winners get a text and an email immediately; anyone who would exceed $999 in 12 months is skipped automatically.
+2. **Winners → To ship**: when someone claims, buy or pull the notes, ship them insured with tracking, then **Mark shipped** (the winner is notified).
+3. Reminders go out automatically on day 3 and day 7. After the deadline, **Draw alternate** fills the spot.
 
 ## 9. Backups
 
