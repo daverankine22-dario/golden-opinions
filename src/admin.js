@@ -168,7 +168,7 @@ export function adminRoutes(r) {
     audit(a.id, 'settings.note_oz', { noteOz: v });
     sendJson(res, 200, { ok: true });
   });
-  /* ----- internal Gold Note rate ($ per note) — used only for the $999 limit, the $5,000 pool cap and records ----- */
+  /* ----- internal Gold Note rate ($ per note) — used only for the $999 limit, the $2,500 pool cap and records ----- */
   r.put('/api/admin/settings/goldback', async (req, res) => {
     const a = requireAdmin(req); const b = await jsonBody(req); const v = Number(b.rate);
     if (!(v > 0 && v < 10000)) throw bad('Enter the dollar rate for one Gold Note');

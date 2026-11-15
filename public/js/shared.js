@@ -36,7 +36,7 @@ export const PLACES = [1, 2, 3];
 /* Winning limit: no person may win more than this (est. value on drawing day) in any 12 consecutive months.
    Keeps every winner under the IRS Form 1099-MISC prize threshold ($2,000 per calendar year from 2026). */
 export const WIN_CAP = 999;
-export const POOL_CAP = 5000; // total prize value per survey (New York / Florida registration threshold)
+export const POOL_CAP = 2500; // total prize value per survey, as stated in the Official Rules (must stay under the $5,000 New York / Florida registration threshold)
 export const CLAIM_DAYS = 14;
 
 export const fmtNum = n => String(+Number(n).toFixed(6));

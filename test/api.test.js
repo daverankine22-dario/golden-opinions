@@ -75,7 +75,7 @@ test('admin creates a survey and sets the Gold Note rate', async () => {
   const tooBig = await admin.put('/api/admin/surveys/s_toobig', { survey: { title: 'Too big', status: 'draft', questions: qs, tiers: [{ place: 1, winners: 10, notes: 80 }], noteRate: 7.5 } });
   const topTooBig = await admin.put('/api/admin/surveys/s_toobig', { survey: { title: 'Top too big', status: 'draft', questions: qs, tiers: [{ place: 1, winners: 1, notes: 80 }], noteRate: 20 } });
   assert.match(topTooBig.body.error, /\$999/, '80 notes at $20 = $1,600 is over the yearly limit');
-  assert.match(tooBig.body.error, /\$5,000/, '800 notes × $7.50 = $6,000 is over the per-survey cap');
+  assert.match(tooBig.body.error, /\$2,500/, '800 notes × $7.50 = $6,000 is over the per-survey cap');
 });
 
 test('sign up, duplicate accounts, log in, wrong codes', async () => {
@@ -174,6 +174,14 @@ test('campaign respects opt-in and language; unsubscribe link works', async () =
   const link = JSON.parse(mail.body).text.match(/\/u\/([\w.-]+)/)[1];
   const u = await fetch(base + '/u/' + link); assert.equal(u.status, 200);
   assert.ok((await u.text()).includes('unsubscribed'));
+});
+
+test('legal documents are served as pages and app fragments', async () => {
+  for (const [path, title] of [['/terms', 'Terms and Conditions'], ['/privacy', 'Privacy Policy'], ['/rules', 'Official Rules'], ['/official-rules', 'Official Rules']]) {
+    const r = await fetch(base + path); assert.equal(r.status, 200, path); const h = await r.text();
+    assert.ok(h.includes(`<h1>${title}</h1>`), path); assert.ok(h.includes('Zyng Technologies'), path);
+  }
+  for (const k of ['terms', 'privacy', 'rules']) assert.equal((await fetch(`${base}/legal/${k}.html`)).status, 200);
 });
 
 test('CSV export and account deletion', async () => {

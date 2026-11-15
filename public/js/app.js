@@ -424,43 +424,19 @@ function viewDone(){
   </div>`;
 }
 
-/* legal */
+/* legal: the Terms, Privacy Policy and Official Rules are the company's documents in /public/legal, also served as web pages at /terms, /privacy and /rules */
+const LEGAL_DOCS={terms:['Terms & Conditions','Términos y condiciones'],privacy:['Privacy Policy','Política de privacidad'],rules:['Official Rules','Reglas oficiales']};
+async function loadLegal(k){
+  S.legalDocs=S.legalDocs||{}; if(S.legalDocs[k]!==undefined) return; S.legalDocs[k]=null;
+  try{const r=await fetch('/legal/'+k+'.html',{cache:'no-cache'});S.legalDocs[k]=r.ok?await r.text():''}catch{S.legalDocs[k]=''}
+  if(S.view==='legal') render();
+}
 function viewLegal(){
-  const k=S.legal;
-  const T={terms:['Terms & Conditions',`
-<p><b>Template — have your attorney review before launch.</b> Last updated ${fmtDate(Date.now())}.</p>
-<h3>1. Who we are</h3><p>Golden Opinions ("we", "us") is operated by [Company legal name], [address]. Powered by Zyng Technologies.</p>
-<h3>2. Eligibility</h3><p>You must be 18 or older (19 in AL and NE, 21 in MS) and a legal resident of the 50 United States or D.C. to create an account or enter a draw. Void where prohibited.</p>
-<h3>3. Your account</h3><p>You sign in with your email address and mobile phone number. These are used to log you in, verify your identity with a one-time code, and limit each person to one entry per survey. You may hold only one account. Accounts created with false or duplicate details may be removed and their entries disqualified.</p>
-<h3>4. Surveys</h3><p>Answer honestly. We may close a survey at any time. Each person (identified by email address and phone number) can complete each survey once.</p>
-<h3>5. Prize draws</h3><p>Completing a survey enters you into that survey's prize draw, subject to the <a href="#" data-act="legal" data-k="rules">Official Rules</a>. No purchase or payment is necessary to enter or win.</p>
-<h3>6. Messages</h3><p>If you opt in, we'll send texts and emails about new surveys. Message frequency varies. Msg &amp; data rates may apply. Reply STOP to cancel or HELP for help. Consent is not a condition of entry.</p>
-<h3>7. Acceptable use</h3><p>No bots, scripts, multiple accounts or attempts to tamper with the draw.</p>
-<h3>8. Liability</h3><p>The service is provided "as is." To the extent permitted by law, our liability is limited to the value of any prize you won.</p>
-<h3>9. Changes</h3><p>We may update these terms; we'll post the new date here.</p>
-<h3>10. Contact</h3><p>[support email] · [phone]</p>`],
-privacy:['Privacy Policy',`
-<p><b>Template — have your attorney review before launch.</b></p>
-<div class="goldcard" style="margin:12px 0"><b>Our promise: we will never sell, rent or share your personal information with third parties for their marketing.</b></div>
-<h3>What we collect</h3><ul><li>First and last name and state — to create your account and contact you if you win.</li><li>Email address and mobile phone number — for login and one-entry-per-survey checks only.</li><li>Your survey answers.</li><li>Basic technical data (device type, time of entry) for fraud prevention.</li></ul>
-<h3>How we use it</h3><ul><li>To sign you in with a one-time code.</li><li>To stop duplicate entries.</li><li>To send entry confirmations, and, only if you opt in, new-survey alerts.</li><li>To contact prize winners.</li><li>Survey answers are reported to survey sponsors in aggregate or without your contact details.</li></ul>
-<h3>Who we share with</h3><p>Only service providers that help us run the app (hosting, text and email delivery), under contracts that forbid any other use. We may disclose information if the law requires it. If you win, we publish only your first name, last initial and state (for example, "Betty W - California"). Your full name, email and phone number are never shown publicly.</p>
-<h3>Your choices</h3><p>Reply STOP to texts, use the unsubscribe link in emails, or switch off alerts in the app. You can ask us to access or delete your data at [privacy email]. California residents have additional rights under the CCPA/CPRA.</p>
-<h3>Security &amp; retention</h3><p>Data is encrypted in transit and kept only as long as needed for the purposes above and legal record-keeping.</p>
-<h3>Children</h3><p>The service is not for anyone under 18.</p>`],
-rules:['Official Rules',`
-<p><b>Template — sweepstakes laws vary by state. Have your attorney finalize before launch.</b></p>
-<h3>NO PURCHASE NECESSARY TO ENTER OR WIN.</h3><p>A purchase or payment will not increase your chances of winning.</p>
-<h3>Sponsor</h3><p>[Company legal name], [address].</p>
-<h3>Eligibility</h3><p>Legal residents of the 50 U.S. states and D.C., 18+ (or age of majority). Employees of Sponsor and their immediate families are not eligible. Void where prohibited.</p>
-<h3>How to enter</h3><p>(1) Complete an eligible survey in the Golden Opinions app during its entry period; or (2) <b>Alternate method of entry:</b> hand-print your name, address, email, phone and the survey name on a 3"×5" card and mail it to [address], postmarked by the survey end date. Limit one entry per person per survey regardless of method.</p>
-<h3>Prizes</h3><p>Each survey awards up to three prize places. For each place the survey shows the number of winners and the number of Gold Notes each winner receives, and the amount of 24-karat gold they contain. The approximate retail value (ARV) of each prize is based on the official Gold Note exchange rate on the drawing date. Prizes are not transferable; no cash substitute except at Sponsor's discretion. The issuer of the Gold Notes is not a sponsor of and is not affiliated with this promotion.</p>
-<h3>Drawing &amp; odds</h3><p>Winners are selected in a random drawing from all eligible entries within [X] days after the survey closes. Odds depend on the number of eligible entries.</p>
-<h3>Winning limit</h3><p>No person may win prizes with a combined approximate retail value of more than $${WIN_CAP} in any 12 consecutive months. Each prize's value is set by the official Gold Note exchange rate on its drawing date. Entries from a person who would exceed this limit are skipped in that drawing, but the person may still take surveys and will be eligible again once their 12-month total allows.</p>
-<h3>Notification &amp; claiming</h3><p>Winners are notified by text message and email and must claim the prize in the Golden Opinions app within ${CLAIM_DAYS} days of notification. If a prize is not claimed by the deadline, it will be forfeited and an alternate winner may be selected at random from the remaining eligible entries. Sponsor will never ask a winner for payment, shipping fees, gift cards or bank details. Winners may be required to sign an affidavit of eligibility and release. Winners are responsible for applicable taxes; prize income may be taxable even when no IRS Form 1099 is issued. Because of the winning limit, Sponsor does not expect any winner to reach the Form 1099-MISC reporting threshold.</p>
-<h3>Winners list</h3><p>Send a self-addressed stamped envelope to [address] within 60 days of the drawing.</p>`]};
-  const [t,b]=T[k];
-  return `<div class="wrap"><div class="topbar"><button class="iconbtn" data-act="legalBack" aria-label="Back">←</button><h2 style="margin:0">${T(t,{'Terms & Conditions':'Términos y condiciones','Privacy Policy':'Política de privacidad','Official Rules':'Reglas oficiales'}[t]||t)}</h2>${langToggle()}</div>${T('',`<div class="note" style="margin-bottom:12px">Este documento está disponible solo en inglés por ahora. La versión en español estará disponible pronto; la versión en inglés es la que rige.</div>`)}<div class="card legal notr">${b}</div></div>`;
+  const k=LEGAL_DOCS[S.legal]?S.legal:'terms'; const [en,es]=LEGAL_DOCS[k];
+  const html=(S.legalDocs||{})[k]; if(html===undefined) loadLegal(k);
+  const body=html==null?`<p class="muted">${T('Loading…','Cargando…')}</p>`:html||`<p>${T('This document could not be loaded. Please try again, or open it at','No se pudo cargar este documento. Inténtalo de nuevo o ábrelo en')} <a href="/${k}" target="_blank" rel="noopener">${location.host}/${k}</a>.</p>`;
+  return `<div class="wrap"><div class="topbar"><button class="iconbtn" data-act="legalBack" aria-label="Back">←</button><h2 style="margin:0">${T(en,es)}</h2>${langToggle()}</div>${T('',`<div class="note" style="margin-bottom:12px">Este documento está disponible solo en inglés por ahora. La versión en inglés es la que rige.</div>`)}<div class="card legal notr">${body}</div>
+  <p class="faint tiny center" style="margin:12px 0 24px">${['terms','privacy','rules'].filter(x=>x!==k).map(x=>`<a href="#" data-act="legal" data-k="${x}">${T(...LEGAL_DOCS[x])}</a>`).join(' · ')} · <a href="/${k}" target="_blank" rel="noopener">${T('Open as a web page','Abrir como página web')}</a></p></div>`;
 }
 
 /* ---------- admin ---------- */

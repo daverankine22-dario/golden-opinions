@@ -78,8 +78,8 @@ Log in at `https://admin.goldenopinions.com`: email + password, then the 6-digit
 
 ## 7. Before you open to the public
 
-- [ ] Your attorney has finalized the **Terms, Privacy Policy and Official Rules**. A developer replaces the template text in `public/js/app.js` (`viewLegal`), including the mail-in entry address and sponsor details. Get a professional Spanish translation.
-- [ ] Each survey's total prize pool is under **$5,000**, or you've registered and bonded in New York and Florida.
+- [ ] Your attorney has finalized the **Terms, Privacy Policy and Official Rules**. They live in `public/legal/terms.html`, `privacy.html` and `rules.html`: the app's legal screens load them, and they're also public web pages at `/terms`, `/privacy` and `/rules` (use `https://yourdomain.com/privacy` for Twilio and Postmark registration). To update one, replace its file and redeploy. Get a professional Spanish translation.
+- [ ] Each survey's total prize pool is under **$2,500** (the app enforces this, matching the Official Rules; New York and Florida require registration above $5,000).
 - [ ] Your attorney has decided whether to name the Gold Notes' issuer, and the issuer has approved any use of its name or images.
 - [ ] Twilio campaign approved and Postmark approved. The admin header shows "Texts on" and "Email on" (not TEST MODE).
 - [ ] Soft launch: staff and friends sign up, take a survey, receive codes and confirmations, you draw them as test winners, they claim, you mark shipped. Then delete the test survey or close it.

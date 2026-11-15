@@ -53,6 +53,8 @@ export function buildApp() {
     } catch { return false; }
   }
 
+  const LEGAL_PAGES = { '/terms': ['terms', 'Terms and Conditions'], '/privacy': ['privacy', 'Privacy Policy'], '/rules': ['rules', 'Official Rules'] };
+  LEGAL_PAGES['/official-rules'] = LEGAL_PAGES['/rules']; LEGAL_PAGES['/privacy-policy'] = LEGAL_PAGES['/privacy']; LEGAL_PAGES['/terms-and-conditions'] = LEGAL_PAGES['/terms'];
   return async function handler(req, res) {
     for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
     const url = new URL(req.url, 'http://x'); const path = url.pathname;
@@ -78,6 +80,20 @@ export function buildApp() {
         if (await serveFile(res, join(ADMIN, 'index.html'))) return;
       }
       if (config.adminHost && isAdminHost(req) && path === '/') { res.writeHead(302, { Location: '/admin' }); res.end(); return; }
+      // Legal documents as plain web pages (for Twilio / app-store registration, printing and linking)
+      const doc = LEGAL_PAGES[path.replace(/\/$/, '')];
+      if (doc) {
+        const body = await readFile(join(PUBLIC, 'legal', doc[0] + '.html'), 'utf8');
+        const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${doc[1]} · Golden Opinions</title><link rel="icon" href="/img/icon-192.png">
+<style>body{font:15px/1.6 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:#1d2433;background:#f6f7fb;margin:0}main{max-width:820px;margin:0 auto;padding:28px 20px 60px;background:#fff;min-height:100vh}
+header{display:flex;align-items:center;gap:14px;border-bottom:3px solid #d4a52a;padding-bottom:14px;margin-bottom:6px}header img{height:44px}h1{font-size:24px;margin:0;color:#0b2a8a}
+h2{font-size:18px;margin:26px 0 6px;color:#0b2a8a}.updated{color:#667;font-size:13px}table{width:100%;border-collapse:collapse;font-size:14px;margin:8px 0 14px}th,td{text-align:left;vertical-align:top;padding:8px;border-bottom:1px solid #e3e6ef}th{background:#f1f3f9}
+.tscroll{overflow-x:auto}nav{margin-top:30px;font-size:14px;color:#667}a{color:#0b2a8a}@media print{body{background:#fff}main{padding:0}nav{display:none}}</style></head>
+<body><main><header><img src="/img/logo.png" alt="Golden Opinions"><h1>${doc[1]}</h1></header>${body}
+<nav>${Object.values(LEGAL_PAGES).filter((v, i, a) => a.indexOf(v) === i && v !== doc).map(v => `<a href="/${v[0]}">${v[1]}</a>`).join(' · ')} · <a href="/">Golden Opinions app</a></nav></main></body></html>`;
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
+        res.end(req.method === 'HEAD' ? undefined : html); return;
+      }
       // Participant app + static assets
       const rel = normalize(path === '/' ? 'index.html' : path.slice(1));
       if (rel.startsWith('..')) throw new HttpError(404, 'Not found');
