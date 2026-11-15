@@ -44,11 +44,15 @@ export function buildApp() {
 
   const isAdminHost = req => !config.adminHost || String(req.headers.host || '').toLowerCase().split(':')[0] === config.adminHost;
 
-  async function serveFile(res, file, cache) {
+  // Files are revalidated on every load (ETag), so a new version shows up right away; only images are cached for an hour.
+  async function serveFile(req, res, file, cache) {
     try {
       const st = await stat(file); if (!st.isFile()) return false;
+      const etag = `"${st.size.toString(36)}-${Math.floor(st.mtimeMs).toString(36)}"`;
+      const head = { 'Content-Type': TYPES[extname(file)] || 'application/octet-stream', 'Cache-Control': cache || 'no-cache', ETag: etag };
+      if (req.headers['if-none-match'] === etag) { res.writeHead(304, head); res.end(); return true; }
       const body = await readFile(file);
-      res.writeHead(200, { 'Content-Type': TYPES[extname(file)] || 'application/octet-stream', 'Cache-Control': cache || 'no-cache', 'Content-Length': body.length });
+      res.writeHead(200, { ...head, 'Content-Length': body.length });
       res.end(body); return true;
     } catch { return false; }
   }
@@ -76,8 +80,8 @@ export function buildApp() {
         if (!isAdminHost(req)) throw new HttpError(404, 'Not found');
         const rel = normalize(path.replace(/^\/admin\/?/, '') || 'index.html');
         if (rel.startsWith('..')) throw new HttpError(404, 'Not found');
-        if (await serveFile(res, join(ADMIN, rel))) return;
-        if (await serveFile(res, join(ADMIN, 'index.html'))) return;
+        if (await serveFile(req, res, join(ADMIN, rel))) return;
+        if (await serveFile(req, res, join(ADMIN, 'index.html'))) return;
       }
       if (config.adminHost && isAdminHost(req) && path === '/') { res.writeHead(302, { Location: '/admin' }); res.end(); return; }
       // Legal documents as plain web pages (for Twilio / app-store registration, printing and linking)
@@ -97,9 +101,9 @@ h2{font-size:18px;margin:26px 0 6px;color:#0b2a8a}.updated{color:#667;font-size:
       // Participant app + static assets
       const rel = normalize(path === '/' ? 'index.html' : path.slice(1));
       if (rel.startsWith('..')) throw new HttpError(404, 'Not found');
-      const longCache = /^(img|css|js)\//.test(rel) ? 'public, max-age=3600' : undefined;
-      if (await serveFile(res, join(PUBLIC, rel), longCache)) return;
-      if (!extname(rel) && await serveFile(res, join(PUBLIC, 'index.html'))) return; // app routes
+      const longCache = /^img\//.test(rel) ? 'public, max-age=3600' : undefined;
+      if (await serveFile(req, res, join(PUBLIC, rel), longCache)) return;
+      if (!extname(rel) && await serveFile(req, res, join(PUBLIC, 'index.html'))) return; // app routes
       throw new HttpError(404, 'Not found');
     } catch (err) {
       if (res.headersSent) { res.end(); return; }
