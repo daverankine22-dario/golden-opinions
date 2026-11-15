@@ -43,7 +43,7 @@ See **SETUP.md** for the full launch checklist (hosting, domain, texting registr
 
 Participant: `GET /api/public`, `POST /api/auth/start|verify|resend|logout`, `POST /api/auth/recover/start|verify`, `GET /api/me`, `PUT /api/me/profile|prefs`, `POST /api/me/contact/start|verify`, `DELETE /api/me`, `GET /api/surveys/:id`, `PUT /api/surveys/:id/draft`, `POST /api/surveys/:id/submit`, `POST /api/wins/:id/claim`, `GET /u/:token` (email unsubscribe).
 
-Admin: `POST /api/admin/login|verify|logout`, `GET /api/admin/me|data|outbox|audit`, `PUT|DELETE /api/admin/surveys/:id`, `GET /api/admin/surveys/:id/export.csv`, `POST /api/admin/surveys/:id/draw`, `PUT /api/admin/settings/note|goldback`, `POST /api/admin/winners`, `PUT|DELETE /api/admin/winners/:id`, `POST /api/admin/winners/:id/remind|ship|forfeit`, `POST /api/admin/campaigns`.
+Admin: `POST /api/admin/login|verify|logout`, `GET /api/admin/me|data|outbox|audit`, `PUT|DELETE /api/admin/surveys/:id`, `GET /api/admin/surveys/:id/export.csv?type=personal|anonymous|summary`, `POST /api/admin/surveys/:id/draw`, `PUT /api/admin/settings/note|goldback`, `POST /api/admin/winners`, `PUT|DELETE /api/admin/winners/:id`, `POST /api/admin/winners/:id/remind|ship|forfeit`, `POST /api/admin/campaigns`.
 
 Webhook: `POST /api/webhooks/twilio` (STOP/START replies; signature-checked).
 

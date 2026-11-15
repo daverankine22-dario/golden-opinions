@@ -72,7 +72,7 @@ Log in at `https://admin.goldenopinions.com`: email + password, then the 6-digit
 ## 6. Set up your first survey
 
 1. **Overview → Gold Note size**: the ounces of gold in each Gold Note (e.g. 0.001). The dollar value of one note is entered on each survey (next step).
-2. **Surveys & reports → + New survey** (or **+ Sample survey** to see every answer type). Fill in the Spanish (🇪🇸 Español) sections, enter **Value of one Gold Note today ($)** (internal: checks each person's $999 yearly limit when they enter; locked after the first entry), fill in **Prizes by place** (number of winners and Gold Notes for 1st, 2nd and 3rd place; the gold each winner receives is calculated for you), set the end and drawing dates, and use **Preview on phone**.
+2. **Surveys → + New survey** (or **+ Sample survey** to see every answer type). Fill in the Spanish (🇪🇸 Español) sections, enter **Value of one Gold Note today ($)** (internal: checks each person's $999 yearly limit when they enter; locked after the first entry), fill in **Prizes by place** (number of winners and Gold Notes for 1st, 2nd and 3rd place; the gold each winner receives is calculated for you), set the end and drawing dates, and use **Preview on phone**.
 3. Set **Status → Live** and save.
 4. Make the QR code for your posters point at `https://goldenopinions.com`.
 
@@ -86,16 +86,27 @@ Log in at `https://admin.goldenopinions.com`: email + password, then the 6-digit
 
 ## 8. Drawing day
 
-1. Open the survey's report → **Draw N winners** → check the date and claim deadline → **Draw & notify**. Places are filled in order: 1st, then 2nd, then 3rd. Winners get a text and an email immediately; anyone who would exceed $999 in 12 months is skipped automatically.
+1. **Surveys** tab → **🎲 Draw N winners** on the survey's row → check the date and claim deadline → **Draw & notify**. Places are filled in order: 1st, then 2nd, then 3rd. Winners get a text and an email immediately; anyone who would exceed $999 in 12 months is skipped automatically.
 2. **Winners → To ship**: when someone claims, buy or pull the notes, ship them insured with tracking, then **Mark shipped** (the winner is notified).
 3. Reminders go out automatically on day 3 and day 7. After the deadline, **Draw alternate** fills the spot.
 
-## 9. Backups
+## 9. Reports
+
+**Reports** tab → pick a survey, then one of four reports. Each has **Download CSV** (opens in Excel or Google Sheets); 3 and 4 also have **Print / Save PDF**.
+
+1. **Responses with personal data**: name, email, phone, state and every answer. For running draws and contacting winners only.
+2. **Responses without personal data**: state, language, date and every answer. Safe to share with clients.
+3. **Percentages**: each question with the percent who picked each answer.
+4. **Percentages & graphs**: the same, with bar charts.
+
+Every download is recorded in the audit log with the report type.
+
+## 10. Backups
 
 - Render takes **daily snapshots** of the persistent disk automatically (restorable from the dashboard).
 - For an off-site copy, run `npm run backup` (in the Shell or as a Render cron job). It writes a consistent copy to `/data/backups/`; copy those files to cloud storage regularly.
 
-## 10. Security habits
+## 11. Security habits
 
 - Only give admin accounts to staff who need them. Use a unique password for each and never share accounts.
 - The audit log records every staff sign-in, draw, winner change, export and campaign (`/api/admin/audit`).

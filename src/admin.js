@@ -4,7 +4,7 @@ import { config } from './config.js';
 import { all, get, run, tx, rowParticipant, rowSurvey, rowResponse, rowWinner, saveSurvey, saveWinner, getSetting, setSetting, audit, parse } from './db.js';
 import { HttpError, bad, newId, sha256, sixDigits, jsonBody, sendJson, createSession, readSession, endSession, rateLimit, clientIp, checkPassword, safeEqual } from './http.js';
 import { T as MSG, queueEmail, queueSms, sendBoth } from './messaging.js';
-import { WIN_CAP, CLAIM_DAYS, STATES, localDay, addDays, wStatus, surveyProblems, estValue, surveyRateOf, topPrizeValue, prizeLabel, shortPrize, winnersCountOf, fmtPhone, answerText, L, tiersOf, noteOzOf, notesOf, goldOzOf, placeLabel, PLACES, DEFAULT_NOTE_OZ, POOL_CAP, poolValue, surveyPrizeShort, fmtOz, topGoldOz } from '../public/js/shared.js';
+import { WIN_CAP, CLAIM_DAYS, STATES, localDay, addDays, wStatus, surveyProblems, estValue, surveyRateOf, topPrizeValue, prizeLabel, shortPrize, winnersCountOf, fmtPhone, answerText, L, tiersOf, noteOzOf, notesOf, goldOzOf, placeLabel, PLACES, DEFAULT_NOTE_OZ, POOL_CAP, poolValue, surveyPrizeShort, fmtOz, topGoldOz, summaryOf, fmtPct } from '../public/js/shared.js';
 
 const today = () => localDay(Date.now(), config.timeZone);
 const dayRx = /^\d{4}-\d{2}-\d{2}$/;
@@ -123,16 +123,40 @@ export function adminRoutes(r) {
     run('DELETE FROM surveys WHERE id = ?', params.id); audit(a.id, 'survey.delete', { id: params.id });
     sendJson(res, 200, { ok: true });
   });
-  r.get('/api/admin/surveys/:id/export.csv', async (req, res, { params }) => {
+  /* Report downloads. type: personal (with names and contact details) | anonymous (no personal data) | summary (question, answer, percent).
+     Every download is written to the audit log with its type. */
+  r.get('/api/admin/surveys/:id/export.csv', async (req, res, { params, query }) => {
     const a = requireAdmin(req); const s = surveyById(params.id); if (!s) throw new HttpError(404, 'Survey not found');
+    const type = ['personal', 'anonymous', 'summary'].includes(query.get('type')) ? query.get('type') : 'personal';
     const rs = all("SELECT * FROM responses WHERE survey_id = ? AND status = 'submitted' ORDER BY submitted_at", s.id).map(rowResponse);
     const qs = s.questions || [];
     const cell = v => { let t = String(v ?? ''); if (/^[=+\-@]/.test(t)) t = "'" + t; return '"' + t.replace(/"/g, '""') + '"'; };
-    const rows = [['Entry', 'Email', 'Phone', 'Language', 'Submitted', ...qs.map(q => q.text)].map(cell).join(',')];
-    for (const x of rs) rows.push([x.entryNo, x.email, fmtPhone(x.phone), x.lang || 'en', new Date(x.submittedAt).toISOString(), ...qs.map(q => answerText(q, x.answers[q.id]))].map(cell).join(','));
-    audit(a.id, 'survey.export', { id: s.id, rows: rs.length });
+    const line = arr => arr.map(cell).join(',');
+    const people = {}; const person = id => people[id] || (people[id] = participantById(id) || {});
+    const when = ms => new Date(ms).toLocaleString('en-US', { timeZone: config.timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const rows = [];
+    if (type === 'personal') {
+      rows.push(line(['Entry', 'First name', 'Last name', 'Email', 'Phone', 'State', 'Language', 'Submitted', ...qs.map(q => q.text)]));
+      for (const x of rs) { const p = person(x.participantId); rows.push(line([x.entryNo, p.firstName, p.lastName, x.email, fmtPhone(x.phone), p.state, x.lang || 'en', when(x.submittedAt), ...qs.map(q => answerText(q, x.answers[q.id]))])); }
+    } else if (type === 'anonymous') {
+      rows.push(line(['Respondent', 'State', 'Language', 'Submitted (date)', ...qs.map(q => q.text)]));
+      rs.forEach((x, i) => rows.push(line([i + 1, person(x.participantId).state, x.lang || 'en', localDay(x.submittedAt, config.timeZone), ...qs.map(q => answerText(q, x.answers[q.id]))])));
+    } else {
+      rows.push(line(['Survey', s.title])); rows.push(line(['Completed entries', rs.length])); rows.push('');
+      rows.push(line(['#', 'Question', 'Answered', 'Answer', 'Percent', 'Count']));
+      qs.forEach((q, i) => {
+        const sm = summaryOf(q, rs.map(x => x.answers[q.id]));
+        const head = [i + 1, q.text, sm.n];
+        if (sm.kind === 'matrix') for (const r of sm.matrix.rows) sm.matrix.cols.forEach((c, j) => rows.push(line([...head, `${r.label}: ${c}`, fmtPct(r.cells[j].pct), r.cells[j].count])));
+        else if (sm.kind === 'text') rows.push(line([...head, '(written answers)', '', sm.n]));
+        else for (const r of sm.rows) rows.push(line([...head, r.label, fmtPct(r.pct), r.count]));
+        for (const st of sm.stats) rows.push(line([...head, st.label, st.value, '']));
+      });
+    }
+    audit(a.id, 'survey.export', { id: s.id, type, rows: rs.length });
     const name = (s.title || 'survey').replace(/[^\w-]+/g, '-').slice(0, 50);
-    res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${name}-responses.csv"`, 'Cache-Control': 'no-store' });
+    const suffix = { personal: 'responses-with-personal-data', anonymous: 'responses-anonymous', summary: 'summary' }[type];
+    res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${name}-${suffix}.csv"`, 'Cache-Control': 'no-store' });
     res.end('﻿' + rows.join('\r\n'));
   });
 

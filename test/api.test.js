@@ -177,7 +177,14 @@ test('campaign respects opt-in and language; unsubscribe link works', async () =
 });
 
 test('CSV export and account deletion', async () => {
-  const csv = await admin.get(`/api/admin/surveys/${surveyId}/export.csv`); assert.equal(csv.status, 200); assert.match(String(csv.body), /Entry/);
+  const csv = await admin.get(`/api/admin/surveys/${surveyId}/export.csv?type=personal`); assert.equal(csv.status, 200);
+  const pers = String(csv.body); assert.match(pers, /"Entry","First name","Last name","Email","Phone","State"/); assert.match(pers, /Test\d/); assert.match(pers, /@x\.com/);
+  const anon = String((await admin.get(`/api/admin/surveys/${surveyId}/export.csv?type=anonymous`)).body);
+  assert.match(anon, /^\ufeff?"Respondent","State","Language"/); assert.match(anon, /Arizona/);
+  assert.ok(!/@|Test\d|Person|\(602\)|#[A-Z0-9]{6}/.test(anon), 'anonymous report has no names, emails, phones or entry numbers');
+  const sum = String((await admin.get(`/api/admin/surveys/${surveyId}/export.csv?type=summary`)).body);
+  assert.match(sum, /"Question","Answered","Answer","Percent","Count"/); assert.match(sum, /\d+(\.\d)?%/); assert.ok(!/@x\.com/.test(sum));
+  assert.equal(db.get("SELECT COUNT(*) n FROM audit WHERE action = 'survey.export' AND detail LIKE '%anonymous%'").n, 1, 'downloads are logged by type');
   const c = new Client(); await signup(c, 20);
   assert.equal((await c.del('/api/me')).status, 200);
   assert.equal((await c.get('/api/me')).body.me, null, 'logged out after deletion');

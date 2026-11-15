@@ -1,6 +1,6 @@
 // Golden Opinions — admin console (staff only). Served at /admin; talks to /api/admin/*.
 import * as sh from '/js/shared.js';
-import { STATES, TYPES, LIKERT, LIKERT_ES, WIN_CAP, POOL_CAP, CLAIM_DAYS, G_PER_OZ, DEFAULT_NOTE_OZ, PLACES, W_STATUS, fmtUSD, fmtPhone, fmtNum, fmtOz, winnerLabel, placeLabel, tiersOf, noteOzOf, surveyRateOf, topPrizeValue, notesOf, goldOzOf, winnerGoldOz, totalNotesOf, poolValue, surveyPrizeShort, tierPrize, shortPrize, winnersCountOf, answered, likertLabels, newQuestion, addDays, estValue, withUnit, L as Lsh } from '/js/shared.js';
+import { STATES, TYPES, LIKERT, LIKERT_ES, WIN_CAP, POOL_CAP, CLAIM_DAYS, G_PER_OZ, DEFAULT_NOTE_OZ, PLACES, W_STATUS, fmtUSD, fmtPhone, fmtNum, fmtOz, winnerLabel, placeLabel, tiersOf, noteOzOf, surveyRateOf, topPrizeValue, notesOf, goldOzOf, winnerGoldOz, totalNotesOf, poolValue, surveyPrizeShort, tierPrize, shortPrize, winnersCountOf, answered, likertLabels, summaryOf, fmtPct, newQuestion, addDays, estValue, withUnit, L as Lsh } from '/js/shared.js';
 import { esc, qInput } from '/js/ui.js';
 
 const LOGO = '/img/logo.webp';
@@ -119,17 +119,17 @@ function gPrev(el){ const f=el.closest('form'); if(!f) return; const fd=new Form
 
 /* ---------- admin ---------- */
 function viewAdmin(){
-  const tabs=[['overview','Overview'],['surveys','Surveys & reports'],['campaigns','Campaigns'],['winners','Winners'],['participants','Participants']];
+  const tabs=[['overview','Overview'],['surveys','Surveys'],['reports','Reports'],['campaigns','Campaigns'],['winners','Winners'],['participants','Participants']];
   const t=S.adminTab;
   let body='';
   if(t==='overview')body=adOverview();
   else if(t==='surveys')body=adSurveys();
   else if(t==='build')body=adBuild();
-  else if(t==='report')body=adReport();
+  else if(t==='reports'||t==='report')body=adReports();
   else if(t==='campaigns')body=adCampaigns();
   else if(t==='winners')body=adWinners();
   else if(t==='participants')body=adParticipants();
-  const active=t==='build'||t==='report'?'surveys':t;
+  const active=t==='build'?'surveys':t==='report'?'reports':t;
   return `<div class="wrap wide">
   <div class="admin-top"><img src="${LOGO}" alt="Golden Opinions"><div style="flex:1"><div style="font-weight:900;font-size:18px">Admin console</div><div class="faint small">${esc(S.admin.email)} · ${S.data.smsEnabled?'Texts on':'<span style="color:#fde68a">Texts in TEST MODE</span>'} · ${S.data.emailEnabled?'Email on':'<span style="color:#fde68a">Email in TEST MODE</span>'}${S.data.outbox&&S.data.outbox.failed?` · <span style="color:#ffb4ab">${S.data.outbox.failed} messages failed</span>`:''}</div></div><a class="btn sm" href="/" target="_blank" rel="noopener">Participant app ↗</a><button class="btn sm ghost" data-act="refresh">↻ Refresh</button><button class="btn sm ghost" data-act="logout">Log out</button></div>
   <div class="tabs">${tabs.map(([k,l])=>`<button class="tab ${active===k?'on':''}" data-act="atab" data-k="${k}">${l}</button>`).join('')}</div>
@@ -167,7 +167,7 @@ function adSurveys(){
   <div class="card tscroll"><table class="t"><tr><th>Survey</th><th>Status</th><th>Questions</th><th>Entries</th><th>Drafts</th><th>Ends</th><th></th></tr>
   ${list.map(s=>{const r=respsFor(s.id);const sub=r.filter(x=>x.status==='submitted').length;
     return `<tr><td><b>${esc(s.title)}</b><div class="faint tiny">Created ${fmtDate(s.createdAt)} · ${surveyEsReady(s)?'<span style="color:#bbf7d0">ES ✓</span>':'ES incomplete'}</div></td><td>${statusChip(s)}</td><td>${(s.questions||[]).length}</td><td><b>${sub}</b></td><td>${r.length-sub}</td><td>${s.endsAt?fmtDate(s.endsAt+'T12:00'):'—'}</td>
-    <td style="white-space:nowrap"><button class="btn gold sm" data-act="openReport" data-id="${esc(s.id)}">Report</button> <button class="btn sm" data-act="editSurvey" data-id="${esc(s.id)}">Edit</button> <button class="btn sm ghost" data-act="dupSurvey" data-id="${esc(s.id)}">Duplicate</button></td></tr>`}).join('')||`<tr><td colspan="7" class="muted">No surveys${q?' match your search':' yet'}.</td></tr>`}
+    <td style="white-space:nowrap"><button class="btn sm" data-act="editSurvey" data-id="${esc(s.id)}">Edit</button> ${(()=>{const need=winnersCountOf(s)-winners().filter(w=>w.surveyId===s.id&&wStatus(w)!=='forfeited').length;return need>0?`<button class="btn gold sm" data-act="draw" data-id="${esc(s.id)}" ${sub?'':'disabled title="No entries yet"'}>🎲 Draw ${need===1?'1 winner':need+' winners'}</button>`:'<span class="chip ok">✓ Winners drawn</span>'})()} <button class="btn sm" data-act="openReport" data-id="${esc(s.id)}">Reports</button> <button class="btn sm ghost" data-act="dupSurvey" data-id="${esc(s.id)}">Duplicate</button></td></tr>`}).join('')||`<tr><td colspan="7" class="muted">No surveys${q?' match your search':' yet'}.</td></tr>`}
   </table></div>`;
 }
 function statusChip(s){
@@ -256,62 +256,60 @@ function qMissingEs(q){
   return m;
 }
 const surveyEsReady=s=>String(s.title_es||'').trim()&&(s.questions||[]).every(q=>!qMissingEs(q));
-/* report */
-function summarize(q,rs){
-  const vs=rs.map(r=>(r.answers||{})[q.id]).filter(v=>answered(q,v)||(q.type==='matrix'&&v));
-  const n=vs.length;
-  const bars=(pairs,total)=>{const mx=Math.max(1,...pairs.map(p=>p[1]));return `<div class="bars">${pairs.map(([l,c])=>`<div class="bar" title="${esc(l)}: ${c} (${total?Math.round(c/total*100):0}%)"><span class="lbl">${esc(l)}</span><span class="track"><span class="fill" style="display:block;width:${c/mx*100}%"></span></span><span class="n">${c} · ${total?Math.round(c/total*100):0}%</span></div>`).join('')}</div>`};
+/* ---------- reports ---------- */
+const REPORTS=[
+  ['personal','1 · Responses with personal data','Every completed entry with name, email, phone and state, plus all answers.'],
+  ['anonymous','2 · Responses without personal data','Every completed entry with all answers. No names, emails, phone numbers or entry numbers — safe to share with clients.'],
+  ['percent','3 · Percentages','Each question with the percent of people who picked each answer.'],
+  ['graphs','4 · Percentages & graphs','Each question with percentages and a bar chart.']];
+const csvType=t=>t==='personal'?'personal':t==='anonymous'?'anonymous':'summary';
+function sumBlock(q,i,rs,graphs){
+  const sm=summaryOf(q,rs.map(r=>(r.answers||{})[q.id]));
+  const stats=sm.stats.length?`<div class="kv">${sm.stats.map(x=>`<div><b>${esc(x.value)}</b><span>${esc(x.label)}</span></div>`).join('')}</div>`:'';
   let body='';
-  if(['single','dropdown','likert'].includes(q.type)){
-    const opts=q.type==='likert'?likertLabels(q):q.options||[];
-    let pairs=opts.map(o=>[o,vs.filter(v=>v===o).length]);
-    if(pairs.length>12){const top=[...pairs].sort((a,b)=>b[1]-a[1]).slice(0,10);const rest=pairs.length-10;const restN=n-top.reduce((a,p)=>a+p[1],0);pairs=[...top,[`${rest} other options`,restN]]}
-    body=bars(pairs,n);
-    if(q.type==='likert'&&n){const avg=vs.reduce((s,v)=>s+opts.indexOf(v)+1,0)/n;body=`<div class="kv"><div><b>${avg.toFixed(2)}</b><span>average (1–${opts.length})</span></div></div>`+body}
-  }else if(q.type==='multi'){
-    body=bars((q.options||[]).map(o=>[o,vs.filter(v=>v.includes(o)).length]),n)+`<div class="faint tiny" style="margin-top:6px">% of respondents who picked each option (multiple allowed)</div>`;
-  }else if(q.type==='rating'){
-    const nums=vs.map(Number);const avg=n?nums.reduce((a,b)=>a+b,0)/n:0;const r=[];for(let i=+q.min;i<=+q.max;i++)r.push([String(i),nums.filter(x=>x===i).length]);
-    let nps='';if(+q.min===0&&+q.max===10&&n){const pro=nums.filter(x=>x>=9).length,det=nums.filter(x=>x<=6).length;nps=`<div><b>${Math.round((pro-det)/n*100)}</b><span>NPS</span></div>`}
-    body=`<div class="kv"><div><b>${n?avg.toFixed(1):'—'}</b><span>average</span></div>${nps}</div>`+bars(r,n);
-  }else if(q.type==='slider'){
-    const nums=vs.map(Number).sort((a,b)=>a-b);const avg=n?nums.reduce((a,b)=>a+b,0)/n:0;const med=n?nums[Math.floor(n/2)]:0;
-    const U=x=>n?esc(withUnit(x,q.unit)):'—';
-    body=`<div class="kv"><div><b>${U(avg.toFixed(1))}</b><span>average</span></div><div><b>${U(med)}</b><span>median</span></div><div><b>${n?U(nums[0])+' – '+U(nums[n-1]):'—'}</b><span>range</span></div></div>`;
-  }else if(q.type==='matrix'){
-    const labs=likertLabels(q);
-    body=`<div class="tscroll"><table class="t"><tr><th></th>${labs.map(l=>`<th style="text-transform:none;letter-spacing:0">${esc(l)}</th>`).join('')}<th>Avg</th></tr>${(q.rows||[]).map(r=>{const rv=vs.map(v=>v[r]).filter(Boolean);const avg=rv.length?rv.reduce((s,x)=>s+labs.indexOf(x)+1,0)/rv.length:0;
-      return `<tr><td><b>${esc(r)}</b></td>${labs.map(l=>{const c=rv.filter(x=>x===l).length;const pct=rv.length?c/rv.length:0;return `<td title="${c} of ${rv.length}" style="background:rgba(242,196,74,${(pct*.75).toFixed(2)});text-align:center">${c}</td>`}).join('')}<td><b>${rv.length?avg.toFixed(2):'—'}</b></td></tr>`}).join('')}</table></div>`;
-  }else if(q.type==='text'){
-    body=`<div class="answers-list">${vs.slice(-50).reverse().map(v=>`<div>${esc(v)}</div>`).join('')||'<div class="faint">No answers yet</div>'}</div>`;
-  }
-  return `<div class="card"><div style="display:flex;justify-content:space-between;gap:8px"><h3 style="margin:0">${esc(q.text)}</h3><span class="chip">${TYPES[q.type].name}</span></div><div class="faint tiny" style="margin-top:4px">${n} answered</div>${body}</div>`;
+  if(sm.kind==='options'){
+    if(graphs){body=`<div class="bars">${sm.rows.map(r=>`<div class="bar" title="${esc(r.label)}: ${r.count} of ${sm.n}"><span class="lbl">${esc(r.label)}</span><span class="track"><span class="fill" style="display:block;width:${Math.min(100,r.pct)}%"></span></span><span class="n">${fmtPct(r.pct)}</span></div>`).join('')}</div>`;}
+    else body=`<table class="t pct"><tr><th>Answer</th><th style="text-align:right">Percent</th></tr>${sm.rows.map(r=>`<tr><td>${esc(r.label)}</td><td style="text-align:right"><b>${fmtPct(r.pct)}</b></td></tr>`).join('')}</table>`;
+  }else if(sm.kind==='matrix'){
+    const {cols,rows}=sm.matrix;
+    body=`<div class="tscroll"><table class="t pct"><tr><th></th>${cols.map(c=>`<th style="text-transform:none;letter-spacing:0;text-align:center">${esc(c)}</th>`).join('')}<th style="text-align:center">Avg</th></tr>${rows.map(r=>`<tr><td><b>${esc(r.label)}</b></td>${r.cells.map(c=>`<td style="text-align:center;${graphs?`background:rgba(242,196,74,${(c.pct/100*.8).toFixed(2)})`:''}">${fmtPct(c.pct)}</td>`).join('')}<td style="text-align:center"><b>${r.avg||'—'}</b></td></tr>`).join('')}</table></div>`;
+  }else body=`<div class="faint small" style="margin-top:8px">${sm.n} written answer${sm.n===1?'':'s'}. Read them in report 1 or 2.</div>`;
+  return `<div class="card rq"><div style="display:flex;justify-content:space-between;gap:8px"><h3 style="margin:0">${i+1}. ${esc(q.text)}</h3><span class="chip noprint">${TYPES[q.type].name}</span></div><div class="faint tiny" style="margin-top:4px">${sm.n} of ${rs.length} answered</div>${stats}${body}${sm.note&&sm.kind!=='text'?`<div class="faint tiny" style="margin-top:6px">${esc(sm.note)}</div>`:''}</div>`;
 }
-function adReport(){
-  const s=S.data.surveys[S.reportId];if(!s)return '<div class="card">Survey not found.</div>';
+function respTable(s,rs,personal){
+  const qs=s.questions||[];const q=S.q.toLowerCase();
+  const ordered=[...rs].sort((a,b)=>a.submittedAt-b.submittedAt).map((r,i)=>({r,i:i+1,p:S.data.participants[r.participantId]||{}}));
+  const rowsAll=ordered.filter(({r,p})=>{if(!q)return true;const hay=[...(personal?[r.email,r.phone,fmtPhone(r.phone),'#'+r.entryNo,p.firstName,p.lastName]:[]),p.state,...qs.map(x=>answerText(x,(r.answers||{})[x.id]))].join(' ').toLowerCase();return hay.includes(q)}).reverse();
+  const MAX=300;const rows=rowsAll.slice(0,MAX);
+  const head=personal?['Entry','Name','Email','Phone','State','Lang','Submitted']:['Respondent','State','Lang','Date'];
+  return `<div class="toolbar noprint" style="margin-top:14px"><input class="in" style="max-width:420px" placeholder="${personal?'Search name, email, phone, entry # or any answer…':'Search state or any answer…'}" data-bind="q" value="${esc(S.q)}"><span class="muted small">${rowsAll.length} of ${rs.length} entries${rowsAll.length>MAX?` · first ${MAX} shown — download the CSV for all`:''}</span></div>
+  <div class="card tscroll" style="padding:0"><table class="t wide resp"><tr>${head.map(h=>`<th>${h}</th>`).join('')}${qs.map((x,i)=>`<th style="text-transform:none;letter-spacing:0;min-width:160px">${i+1}. ${esc(x.text)}</th>`).join('')}</tr>
+  ${rows.map(({r,i,p})=>`<tr>${personal?`<td><b>#${esc(r.entryNo)}</b></td><td style="white-space:nowrap">${esc([p.firstName,p.lastName].filter(Boolean).join(' '))}</td><td>${esc(r.email)}</td><td style="white-space:nowrap">${esc(fmtPhone(r.phone))}</td>`:`<td><b>${i}</b></td>`}<td>${esc(p.state||'')}</td><td>${esc((r.lang||'en').toUpperCase())}</td><td class="small" style="white-space:nowrap">${personal?fmtDT(r.submittedAt):fmtDate(r.submittedAt)}</td>${qs.map(x=>`<td class="small">${esc(answerText(x,(r.answers||{})[x.id])||'—')}</td>`).join('')}</tr>`).join('')||`<tr><td colspan="${head.length+qs.length}" class="muted small">No matching entries.</td></tr>`}
+  </table></div>`;
+}
+function adReports(){
+  const list=surveys();
+  if(!list.length)return '<div class="card muted">No surveys yet. Create one on the Surveys tab.</div>';
+  if(!S.data.surveys[S.reportId])S.reportId=list[0].id;
+  const s=S.data.surveys[S.reportId];const type=REPORTS.some(r=>r[0]===S.rtype)?S.rtype:'graphs';
   const all=respsFor(s.id);const sub=all.filter(r=>r.status==='submitted');
-  const q=S.q.toLowerCase();
-  const filtered=sub.filter(r=>{if(!q)return true;const hay=[r.email,r.phone,fmtPhone(r.phone),'#'+r.entryNo,...(s.questions||[]).map(x=>answerText(x,(r.answers||{})[x.id]))].join(' ').toLowerCase();return hay.includes(q)}).sort((a,b)=>b.submittedAt-a.submittedAt);
   const sw=winners().filter(w=>w.surveyId===s.id&&wStatus(w)!=='forfeited');
   const rate=all.length?Math.round(sub.length/all.length*100):0;
-  return `<div class="toolbar"><button class="btn sm" data-act="atab" data-k="surveys">← All surveys</button><span style="flex:1"></span><button class="btn sm" data-act="editSurvey" data-id="${esc(s.id)}">Edit survey</button><a class="btn sm" href="/api/admin/surveys/${encodeURIComponent(s.id)}/export.csv">Download CSV</a>${(()=>{const need=winnersCountOf(s)-sw.length;return need>0?`<button class="btn gold sm" data-act="draw" ${sub.length?'':'disabled'}>🎲 Draw ${need===1?'a winner':need+' winners'}</button>`:'<button class="btn sm" disabled>✓ All winners drawn</button>'})()}</div>
-  <h2>${esc(s.title)} ${statusChip(s)}</h2>
+  const meta=REPORTS.find(r=>r[0]===type);
+  return `<div class="toolbar noprint"><label class="muted small" style="font-weight:800">Survey</label><select class="in" data-bind="reportId" style="max-width:420px">${list.map(x=>`<option value="${esc(x.id)}" ${x.id===s.id?'selected':''}>${esc(x.title||'(untitled)')}</option>`).join('')}</select><span style="flex:1"></span>
+    <a class="btn sm" href="/api/admin/surveys/${encodeURIComponent(s.id)}/export.csv?type=${csvType(type)}">⬇ Download CSV</a>${type==='percent'||type==='graphs'?'<button class="btn sm" data-act="printReport">🖨 Print / Save PDF</button>':''}</div>
+  <div class="rtabs noprint">${REPORTS.map(([k,l])=>`<button class="rtab ${k===type?'on':''}" data-act="rtype" data-k="${k}">${l}</button>`).join('')}</div>
+  <div class="faint small noprint" style="margin:8px 0 14px">${meta[2]}</div>
+  ${type==='personal'?'<div class="note noprint" style="margin-bottom:12px">🔒 Contains personal data. Use it only for running the draws and contacting winners, as the Privacy Policy says. Every download is logged.</div>':''}
+  <div class="printhead"><div style="font-weight:900;font-size:22px">${esc(s.title)}</div><div class="small">${esc(meta[1].replace(/^\d · /,''))} · ${sub.length} completed entries · ${esc(new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}))}</div></div>
+  <h2 class="noprint">${esc(s.title)} ${statusChip(s)}</h2>
   <div class="tiles" style="margin-top:12px">
     <div class="card tile"><div class="k">Completed entries</div><div class="v">${sub.length}</div></div>
     <div class="card tile"><div class="k">Started, not submitted</div><div class="v">${all.length-sub.length}</div></div>
     <div class="card tile"><div class="k">Completion rate</div><div class="v">${all.length?rate+'%':'—'}</div></div>
-    <div class="card tile"><div class="k">Winners drawn</div><div class="v">${sw.length} <span class="faint" style="font-size:16px">of ${winnersCountOf(s)}</span></div><div class="faint tiny">${sw.slice(0,4).map(w=>esc(winnerLabel(w))).join(', ')}${sw.length>4?` and ${sw.length-4} more`:''}</div></div>
+    ${type==='personal'?`<div class="card tile"><div class="k">Winners drawn</div><div class="v">${sw.length} <span class="faint" style="font-size:16px">of ${winnersCountOf(s)}</span></div><div class="faint tiny">${sw.slice(0,4).map(w=>esc(winnerLabel(w))).join(', ')}${sw.length>4?` and ${sw.length-4} more`:''}</div></div>`:''}
   </div>
-  <div class="split">
-    <div>${(s.questions||[]).map(x=>summarize(x,sub)).join('')}</div>
-    <div><div class="card" style="position:sticky;top:12px"><h3>Responses</h3>
-      <input class="in" style="font-size:14px;padding:10px 12px" placeholder="Search email, phone, entry # or any answer…" data-bind="q" value="${esc(S.q)}">
-      <div class="faint tiny" style="margin:8px 0">${filtered.length} of ${sub.length} shown</div>
-      <div style="max-height:70vh;overflow:auto"><table class="t"><tr><th>Entry</th><th>Contact</th><th>Submitted</th></tr>
-      ${filtered.map(r=>`<tr class="click" data-act="expand" data-id="${esc(r.id)}"><td><b>#${esc(r.entryNo)}</b></td><td>${esc(r.email)}<div class="faint tiny">${esc(fmtPhone(r.phone))}</div></td><td class="small">${fmtDT(r.submittedAt)}</td></tr>
-      ${S.expanded===r.id?`<tr><td colspan="3"><div style="background:rgba(255,255,255,.05);border-radius:10px;padding:10px">${(s.questions||[]).map(x=>`<div style="margin-bottom:8px"><div class="faint tiny">${esc(x.text)}</div><div class="small" style="font-weight:700">${esc(answerText(x,(r.answers||{})[x.id])||'—')}</div></div>`).join('')}</div></td></tr>`:''}`).join('')||'<tr><td colspan="3" class="muted small">No matching responses.</td></tr>'}
-      </table></div></div></div>
-  </div>`;
+  ${type==='personal'||type==='anonymous'?respTable(s,sub,type==='personal'):(s.questions||[]).map((q,i)=>sumBlock(q,i,sub,type==='graphs')).join('')||'<div class="card muted">This survey has no questions.</div>'}`;
 }
 /* campaigns */
 function adCampaigns(){
@@ -439,9 +437,12 @@ const ACT = {
   },
   delSurvey() { showModal(`<h2>Delete this survey?</h2><p class="muted">"${esc(S.edit.title)}" will be removed. Collected responses stay in the database. Surveys with winners can't be deleted — close them instead.</p><div style="display:flex;gap:10px;justify-content:flex-end"><button class="btn" data-act="closemodal">Cancel</button><button class="btn danger" data-act="delSurveyYes">Delete</button></div>`); },
   async delSurveyYes() { await busy(async () => { await api('DELETE', '/api/admin/surveys/' + S.edit.id); closeModal(); S.edit = null; S.adminTab = 'surveys'; await refresh(); toast('Survey deleted'); }); },
-  openReport(t) { S.reportId = t.dataset.id; S.adminTab = 'report'; S.q = ''; S.expanded = null; render(); window.scrollTo(0, 0); },
+  rtype(t) { S.rtype = t.dataset.k; S.q = ''; render(); },
+  printReport() { window.print(); },
+  openReport(t) { S.reportId = t.dataset.id; S.adminTab = 'reports'; S.q = ''; S.expanded = null; render(); window.scrollTo(0, 0); },
   expand(t) { S.expanded = S.expanded === t.dataset.id ? null : t.dataset.id; render(); },
   draw(t) {
+    if (t && t.dataset.id) S.reportId = t.dataset.id;
     const s = S.data.surveys[S.reportId]; if (!s) return;
     const taken = winners().filter(w => w.surveyId === s.id && wStatus(w) !== 'forfeited');
     const open = tiersOf(s).map(x => ({ ...x, need: x.winners - taken.filter(w => (w.place || 1) === x.place).length })).filter(x => x.need > 0);

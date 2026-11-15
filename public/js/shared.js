@@ -195,3 +195,40 @@ export function surveyProblems(s) {
 export const surveyRateOf = s => (s && Number(s.noteRate) > 0 ? +s.noteRate : 0);
 /* the largest single prize in a survey, in dollars at the survey's rate: what a person must have room for under the yearly limit to enter */
 export const topPrizeValue = (s, rate = surveyRateOf(s)) => { const t = tiersOf(s); return rate && t.length ? estValue(Math.max(...t.map(x => x.notes)), rate) : 0; };
+
+/* ---------- report summaries (used by the admin reports and the summary CSV, so both always match) ----------
+   summaryOf(q, answers) -> { n, kind, rows:[{label,count,pct}], stats:[{label,value}], matrix:{cols,rows:[{label,n,cells:[{count,pct}],avg}]}, note } */
+const pctOf = (c, n) => (n ? Math.round((c / n) * 1000) / 10 : 0);
+export const fmtPct = p => `${+Number(p).toFixed(1)}%`;
+export function summaryOf(q, answers) {
+  const vs = answers.filter(v => answered(q, v) || (q.type === 'matrix' && v && typeof v === 'object' && Object.keys(v).length));
+  const n = vs.length; const row = (label, count) => ({ label, count, pct: pctOf(count, n) });
+  if (['single', 'dropdown', 'likert'].includes(q.type)) {
+    const opts = q.type === 'likert' ? likertLabels(q) : q.options || [];
+    let rows = opts.map(o => row(o, vs.filter(v => v === o).length));
+    let note = '';
+    if (rows.length > 12) { rows = rows.filter(r => r.count).sort((a, b) => b.count - a.count); note = 'Only answers that were picked are listed.'; }
+    const stats = q.type === 'likert' && n ? [{ label: `Average (1–${opts.length})`, value: (vs.reduce((s, v) => s + opts.indexOf(v) + 1, 0) / n).toFixed(2) }] : [];
+    return { n, kind: 'options', rows, stats, note };
+  }
+  if (q.type === 'multi') return { n, kind: 'options', rows: (q.options || []).map(o => row(o, vs.filter(v => v.includes(o)).length)), stats: [], note: 'Percent of people who picked each option. People could pick more than one, so the total can be over 100%.' };
+  if (q.type === 'rating') {
+    const nums = vs.map(Number); const rows = []; for (let i = +q.min; i <= +q.max; i++) rows.push(row(String(i), nums.filter(x => x === i).length));
+    const stats = n ? [{ label: 'Average', value: (nums.reduce((a, b) => a + b, 0) / n).toFixed(1) }] : [];
+    if (+q.min === 0 && +q.max === 10 && n) { const pro = nums.filter(x => x >= 9).length, det = nums.filter(x => x <= 6).length; stats.push({ label: 'Net Promoter Score', value: String(Math.round(((pro - det) / n) * 100)) }); }
+    return { n, kind: 'options', rows, stats, note: '' };
+  }
+  if (q.type === 'slider') {
+    const nums = vs.map(Number).sort((a, b) => a - b); const lo = +q.min, hi = +q.max; const U = x => withUnit(x, q.unit);
+    const k = 5, w = (hi - lo) / k; const rows = [];
+    for (let i = 0; i < k; i++) { const a = lo + w * i, b = i === k - 1 ? hi : lo + w * (i + 1); const r = x => +Number(x).toFixed(2); rows.push(row(`${U(r(a))} – ${U(r(b))}`, nums.filter(x => x >= a && (i === k - 1 ? x <= b : x < b)).length)); }
+    const stats = n ? [{ label: 'Average', value: U((nums.reduce((a, b) => a + b, 0) / n).toFixed(1)) }, { label: 'Median', value: U(n % 2 ? nums[(n - 1) / 2] : +((nums[n / 2 - 1] + nums[n / 2]) / 2).toFixed(2)) }, { label: 'Lowest – highest', value: `${U(nums[0])} – ${U(nums[n - 1])}` }] : [];
+    return { n, kind: 'options', rows, stats, note: '' };
+  }
+  if (q.type === 'matrix') {
+    const cols = likertLabels(q);
+    const rows = (q.rows || []).map(label => { const rv = vs.map(v => v[label]).filter(Boolean); return { label, n: rv.length, cells: cols.map(c => { const count = rv.filter(x => x === c).length; return { count, pct: pctOf(count, rv.length) }; }), avg: rv.length ? (rv.reduce((s, x) => s + cols.indexOf(x) + 1, 0) / rv.length).toFixed(2) : '' }; });
+    return { n, kind: 'matrix', matrix: { cols, rows }, rows: [], stats: [], note: `Each row shows the percent of people who picked each answer. Average on a 1–${cols.length} scale.` };
+  }
+  return { n, kind: 'text', rows: [], stats: [], note: 'Written answers. Read them in the response reports.', texts: vs.map(String) };
+}
