@@ -92,6 +92,9 @@ const MIGRATIONS = [
    CREATE TABLE admins (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, name TEXT, password_hash TEXT NOT NULL, created_at INTEGER NOT NULL);
    CREATE TABLE audit (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, actor TEXT, action TEXT NOT NULL, detail TEXT);
    CREATE TABLE rate_limits (key TEXT PRIMARY KEY, count INTEGER NOT NULL, reset_at INTEGER NOT NULL);`,
+  // 2: business inquiries from the "Run a survey with us" form
+  `CREATE TABLE inquiries (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'new', data TEXT NOT NULL);
+   CREATE INDEX inquiries_created ON inquiries(created_at);`,
 ];
 
 export function openDb(file) {
@@ -131,6 +134,8 @@ export function rowParticipant(r) { if (!r) return null; return { ...parse(r.dat
 export function rowSurvey(r) { if (!r) return null; return { ...parse(r.data), id: r.id, status: r.status, createdAt: r.created_at, updatedAt: r.updated_at }; }
 export function rowResponse(r) { if (!r) return null; return { id: r.id, surveyId: r.survey_id, participantId: r.participant_id, email: r.email, phone: r.phone, status: r.status, answers: parse(r.answers) || {}, lang: r.lang, entryNo: r.entry_no, startedAt: r.started_at, updatedAt: r.updated_at, submittedAt: r.submitted_at }; }
 export function rowWinner(r) { if (!r) return null; return { ...parse(r.data), id: r.id, surveyId: r.survey_id, responseId: r.response_id, participantId: r.participant_id, status: r.status, date: r.draw_date, estValue: r.est_value, createdAt: r.created_at, updatedAt: r.updated_at }; }
+
+export function rowInquiry(r) { if (!r) return null; return { ...parse(r.data), id: r.id, status: r.status, createdAt: r.created_at, updatedAt: r.updated_at }; }
 
 export function getSetting(key, fallback = null) { const r = get('SELECT value FROM settings WHERE key = ?', key); return r ? parse(r.value) : fallback; }
 export function setSetting(key, value) { run('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at', key, JSON.stringify(value), Date.now()); }

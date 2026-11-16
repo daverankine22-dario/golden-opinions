@@ -90,7 +90,14 @@ Log in at `https://admin.goldenopinions.com`: email + password, then the 6-digit
 2. **Winners → To ship**: when someone claims, buy or pull the notes, ship them insured with tracking, then **Mark shipped** (the winner is notified).
 3. Reminders go out automatically on day 3 and day 7. After the deadline, **Draw alternate** fills the spot.
 
-## 9. Reports
+## 9. Survey requests from businesses
+
+The **Run a survey with us** box at the bottom of the app opens a short form (name, company, email, phone, what they want to learn). Each request is:
+
+- emailed to **connect@mygoldenopinions.com** (change it with the `INQUIRY_EMAIL` setting in Render). Hit **Reply** to answer the person directly; make sure that mailbox exists and is checked.
+- listed in the admin console under **Inquiries**, with a count on the tab and a notice on Overview. Mark each one New → Contacted → Became a client or Closed, and keep private team notes.
+
+## 10. Reports
 
 **Reports** tab → pick a survey, then one of four reports. Each has **Download CSV** (opens in Excel or Google Sheets); 3 and 4 also have **Print / Save PDF**.
 
@@ -101,12 +108,12 @@ Log in at `https://admin.goldenopinions.com`: email + password, then the 6-digit
 
 Every download is recorded in the audit log with the report type.
 
-## 10. Backups
+## 11. Backups
 
 - Render takes **daily snapshots** of the persistent disk automatically (restorable from the dashboard).
 - For an off-site copy, run `npm run backup` (in the Shell or as a Render cron job). It writes a consistent copy to `/data/backups/`; copy those files to cloud storage regularly.
 
-## 11. Security habits
+## 12. Security habits
 
 - Only give admin accounts to staff who need them. Use a unique password for each and never share accounts.
 - The audit log records every staff sign-in, draw, winner change, export and campaign (`/api/admin/audit`).

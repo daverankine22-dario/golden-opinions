@@ -13,9 +13,9 @@ export function queueSms(to, body, kind) {
   if (!config.smsEnabled) console.log(`[sms:test-mode] to ${to}: ${body}`);
   kick();
 }
-export function queueEmail(to, subject, text, html, kind) {
+export function queueEmail(to, subject, text, html, kind, replyTo) {
   if (!to) return;
-  run('INSERT INTO outbox (channel, to_addr, subject, body, kind, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)', 'email', to, subject, JSON.stringify({ text, html }), kind || null, config.emailEnabled ? 'queued' : 'logged', Date.now());
+  run('INSERT INTO outbox (channel, to_addr, subject, body, kind, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)', 'email', to, subject, JSON.stringify(replyTo ? { text, html, replyTo } : { text, html }), kind || null, config.emailEnabled ? 'queued' : 'logged', Date.now());
   if (!config.emailEnabled) console.log(`[email:test-mode] to ${to}: ${subject}`);
   kick();
 }
@@ -54,11 +54,11 @@ async function sendSms(to, body) {
   if (!r.ok) { const e = new Error(`Twilio ${r.status}: ${j.message || 'error'}`); e.permanent = r.status >= 400 && r.status < 500 && r.status !== 429; throw e; }
   return j.sid;
 }
-async function sendEmail(to, subject, { text, html }, kind) {
+async function sendEmail(to, subject, { text, html, replyTo }, kind) {
   const stream = kind === 'campaign' && config.postmark.broadcastStream ? config.postmark.broadcastStream : config.postmark.stream;
   const r = await fetch('https://api.postmarkapp.com/email', {
     method: 'POST', headers: { 'X-Postmark-Server-Token': config.postmark.token, 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ From: config.emailFrom, To: to, Subject: subject, TextBody: text, HtmlBody: html, MessageStream: stream }),
+    body: JSON.stringify({ From: config.emailFrom, To: to, Subject: subject, TextBody: text, HtmlBody: html, MessageStream: stream, ...(replyTo ? { ReplyTo: replyTo } : {}) }),
   });
   const j = await r.json().catch(() => ({}));
   if (!r.ok || j.ErrorCode) { const e = new Error(`Postmark ${r.status}: ${j.Message || 'error'}`); e.permanent = r.status === 422; throw e; }

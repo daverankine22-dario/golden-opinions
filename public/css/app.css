@@ -205,3 +205,7 @@ body.busy .btn{pointer-events:none;opacity:.75}
 .legal th,.legal td{text-align:left;vertical-align:top;padding:8px;border-bottom:1px solid rgba(255,255,255,.12);color:var(--ink2)}
 .legal th{font-weight:800;color:inherit}
 .legal a{color:var(--gold,#f2c44a)}
+/* "Run a survey with us" */
+.bizcta{margin:22px auto 0;max-width:420px;text-align:center;border:1px solid rgba(242,196,74,.35);background:rgba(242,196,74,.08);border-radius:16px;padding:14px 16px;display:grid;gap:10px;justify-items:center}
+.hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+textarea.in{resize:vertical;min-height:110px;font:inherit}

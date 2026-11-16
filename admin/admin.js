@@ -51,7 +51,7 @@ async function api(method, path, body) {
 async function loadData() {
   const d = await api('GET', '/api/admin/data');
   S.today = d.today;
-  S.data = { surveys: byId(d.surveys), participants: byId(d.participants), responses: byId(d.responses), winners: byId(d.winners), campaigns: byId(d.campaigns), settings: d.settings || {}, outbox: d.outbox, smsEnabled: d.smsEnabled, emailEnabled: d.emailEnabled };
+  S.data = { surveys: byId(d.surveys), participants: byId(d.participants), responses: byId(d.responses), winners: byId(d.winners), campaigns: byId(d.campaigns), settings: d.settings || {}, inquiries: d.inquiries || [], inquiryEmail: d.inquiryEmail || "", outbox: d.outbox, smsEnabled: d.smsEnabled, emailEnabled: d.emailEnabled };
 }
 async function busy(fn) { if (S.busy) return; S.busy = true; document.body.classList.add('busy'); try { return await fn(); } catch (e) { toast(e.message); } finally { S.busy = false; document.body.classList.remove('busy'); } }
 async function refresh() { await loadData(); render(); }
@@ -119,7 +119,7 @@ function gPrev(el){ const f=el.closest('form'); if(!f) return; const fd=new Form
 
 /* ---------- admin ---------- */
 function viewAdmin(){
-  const tabs=[['overview','Overview'],['surveys','Surveys'],['reports','Reports'],['campaigns','Campaigns'],['winners','Winners'],['participants','Participants']];
+  const tabs=[['overview','Overview'],['surveys','Surveys'],['reports','Reports'],['campaigns','Campaigns'],['winners','Winners'],['participants','Participants'],['inquiries','Inquiries']];
   const t=S.adminTab;
   let body='';
   if(t==='overview')body=adOverview();
@@ -127,12 +127,13 @@ function viewAdmin(){
   else if(t==='build')body=adBuild();
   else if(t==='reports'||t==='report')body=adReports();
   else if(t==='campaigns')body=adCampaigns();
+  else if(t==='inquiries')body=adInquiries();
   else if(t==='winners')body=adWinners();
   else if(t==='participants')body=adParticipants();
   const active=t==='build'?'surveys':t==='report'?'reports':t;
   return `<div class="wrap wide">
   <div class="admin-top"><img src="${LOGO}" alt="Golden Opinions"><div style="flex:1"><div style="font-weight:900;font-size:18px">Admin console</div><div class="faint small">${esc(S.admin.email)} · ${S.data.smsEnabled?'Texts on':'<span style="color:#fde68a">Texts in TEST MODE</span>'} · ${S.data.emailEnabled?'Email on':'<span style="color:#fde68a">Email in TEST MODE</span>'}${S.data.outbox&&S.data.outbox.failed?` · <span style="color:#ffb4ab">${S.data.outbox.failed} messages failed</span>`:''}</div></div><a class="btn sm" href="/" target="_blank" rel="noopener">Participant app ↗</a><button class="btn sm ghost" data-act="refresh">↻ Refresh</button><button class="btn sm ghost" data-act="logout">Log out</button></div>
-  <div class="tabs">${tabs.map(([k,l])=>`<button class="tab ${active===k?'on':''}" data-act="atab" data-k="${k}">${l}</button>`).join('')}</div>
+  <div class="tabs">${tabs.map(([k,l])=>`<button class="tab ${active===k?'on':''}" data-act="atab" data-k="${k}">${l}${k==='inquiries'&&newInquiries()?` <span class="chip warn" style="padding:1px 7px;margin-left:4px">${newInquiries()}</span>`:''}</button>`).join('')}</div>
   ${body}
   </div>`;
 }
@@ -145,12 +146,29 @@ function goldPriceCard(){
 
   </div>`;
 }
+/* ---------- inquiries: businesses asking us to run a survey ---------- */
+const INQ_STATUS={new:['New','warn'],contacted:['Contacted',''],won:['Became a client','ok'],closed:['Closed','off']};
+const inquiries=()=>S.data.inquiries||[];
+const newInquiries=()=>inquiries().filter(x=>x.status==='new').length;
+function adInquiries(){
+  const f=S.inqFilter||'open'; const q=(S.q||'').toLowerCase();
+  const list=inquiries().filter(x=>f==='all'||(f==='open'?x.status==='new'||x.status==='contacted':x.status===f)).filter(x=>!q||[x.name,x.company,x.email,x.phone,x.message,x.notes].join(' ').toLowerCase().includes(q));
+  const filt=[['open','Open'],['new','New'],['contacted','Contacted'],['won','Became a client'],['closed','Closed'],['all','All']];
+  return `<div class="card" style="margin-bottom:14px"><div style="font-weight:900">Run a survey with us</div><div class="faint small" style="margin-top:4px">Requests from the link at the bottom of the app. Each one is also emailed to <b>${esc(S.data.inquiryEmail||'')}</b>; reply to that email to answer the person directly.</div></div>
+  <div class="toolbar"><div class="rtabs">${filt.map(([k,l])=>`<button class="rtab ${f===k?'on':''}" data-act="inqFilter" data-k="${k}">${l} <span class="faint">${k==='all'?inquiries().length:k==='open'?inquiries().filter(x=>x.status==='new'||x.status==='contacted').length:inquiries().filter(x=>x.status===k).length}</span></button>`).join('')}</div><input class="in" style="max-width:300px" placeholder="Search name, company, email or message…" data-bind="q" value="${esc(S.q||'')}"></div>
+  ${list.length?list.map(x=>`<div class="card" style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><div><div style="font-weight:900;font-size:16px">${esc(x.company||x.name)}</div><div class="small">${x.company?esc(x.name)+' · ':''}<a href="mailto:${esc(x.email)}?subject=${encodeURIComponent('Your Golden Opinions survey request')}">${esc(x.email)}</a>${x.phone?` · <a href="tel:+1${esc(x.phone)}">${esc(fmtPhone(x.phone))}</a>`:''}${x.lang==='es'?' · <span class="chip">Spanish</span>':''}</div><div class="faint tiny">Received ${fmtDT(x.createdAt)}</div></div>
+    <div style="display:flex;gap:8px;align-items:start"><span class="chip ${INQ_STATUS[x.status][1]}">${INQ_STATUS[x.status][0]}</span><select class="in" style="padding:6px 8px;width:auto" data-inq="${esc(x.id)}">${Object.entries(INQ_STATUS).map(([k,[l]])=>`<option value="${k}" ${x.status===k?'selected':''}>${l}</option>`).join('')}</select></div></div>
+    <div style="white-space:pre-wrap;margin-top:10px;padding:10px 12px;border-left:3px solid #f2c44a;background:rgba(255,255,255,.04);border-radius:8px">${esc(x.message)}</div>
+    <label class="f" style="margin-top:10px">Team notes (private)</label><textarea class="in" rows="2" data-inqnote="${esc(x.id)}" placeholder="Who's following up, what was discussed…">${esc(x.notes||'')}</textarea></div>`).join(''):'<div class="card muted">No inquiries here yet.</div>'}`;
+}
+async function saveInquiry(id,patch){ await api('PUT','/api/admin/inquiries/'+encodeURIComponent(id),patch); const r=inquiries().find(x=>x.id===id); if(r) Object.assign(r,patch); }
 function adOverview(){
   const sub=vals(S.data.responses).filter(r=>r.status==='submitted');
   const drafts=vals(S.data.responses).filter(r=>r.status!=='submitted');
   const recent=sub.sort((a,b)=>b.submittedAt-a.submittedAt).slice(0,8);
   const empty=!surveys().length;
   return `${empty?`<div class="goldcard" style="margin-bottom:16px"><div style="font-weight:900;font-size:17px">Welcome! You don't have any surveys yet.</div><div class="muted small" style="margin:4px 0 10px">Load a sample survey that uses all 8 answer types, or start from scratch.</div><button class="btn sm" style="border-color:#7a4b00;color:#3a2500" data-act="sample">Load sample survey</button> <button class="btn sm" style="border-color:#7a4b00;color:#3a2500" data-act="newSurvey">Create a survey</button></div>`:''}
+  ${newInquiries()?`<div class="goldcard" style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><div><div style="font-weight:900">📬 ${newInquiries()} new survey ${newInquiries()===1?'inquiry':'inquiries'}</div><div class="muted small">Businesses asking you to run a survey for them.</div></div><button class="btn gold sm" data-act="atab" data-k="inquiries">View inquiries</button></div>`:''}
   ${goldPriceCard()}
   <div class="tiles">
     <div class="card tile"><div class="k">Live surveys</div><div class="v">${liveSurveys().length}</div></div>
@@ -412,7 +430,8 @@ const ACT = {
   async refresh() { await busy(refresh); toast('Up to date'); },
   async logout() { await busy(async () => { await api('POST', '/api/admin/logout'); S.view = 'login'; S.login = {}; render(); }); },
   loginBack() { S.login = { email: S.login.email }; render(); },
-  atab(t) { S.adminTab = t.dataset.k; S.expanded = null; render(); window.scrollTo(0, 0); },
+  atab(t) { S.adminTab = t.dataset.k; S.expanded = null; S.q = ''; render(); window.scrollTo(0, 0); },
+  inqFilter(t) { S.inqFilter = t.dataset.k; render(); },
   newSurvey() { S.edit = { id: 's_' + uid(), title: '', description: '', tiers: [{ place: 1, winners: 1, notes: 10 }, { place: 2, winners: 0, notes: 0 }, { place: 3, winners: 0, notes: 0 }], noteOz: noteOzDefault(), noteRate: (gbRate() || {}).rate || '', endsAt: '', status: 'draft', questions: [newQuestion('single')] }; S.adminTab = 'build'; render(); },
   editSurvey(t) { S.edit = ensureTiers(JSON.parse(JSON.stringify(S.data.surveys[t.dataset.id]))); S.adminTab = 'build'; render(); window.scrollTo(0, 0); },
   dupSurvey(t) { const s = JSON.parse(JSON.stringify(S.data.surveys[t.dataset.id])); s.id = 's_' + uid(); s.title += ' (copy)'; s.status = 'draft'; delete s.createdAt; s.questions.forEach(q => q.id = 'q' + uid()); S.edit = s; S.adminTab = 'build'; render(); toast('Copy created — save to keep it'); },
@@ -496,6 +515,8 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => {
   const t = e.target;
+  if (t.dataset.inq) { const st = t.value; busy(async () => { await saveInquiry(t.dataset.inq, { status: st }); toast('Inquiry marked ' + INQ_STATUS[st][0].toLowerCase()); render(); }); return; }
+  if (t.dataset.inqnote) { const v = t.value; busy(async () => { await saveInquiry(t.dataset.inqnote, { notes: v }); toast('Notes saved'); }); return; }
   if (t.dataset.wprev) { wPrev(); return; }
   if (t.dataset.gprev && !t.dataset.ef) { gPrev(t); return; }
   if (t.dataset.ef) { S.edit[t.dataset.ef] = t.value; if (t.dataset.gprev) gPrev(t); return; }

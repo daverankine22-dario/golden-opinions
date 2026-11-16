@@ -26,6 +26,7 @@ export const config = {
   companyAddress: e.COMPANY_ADDRESS || '[Company mailing address]',
   secret: e.APP_SECRET || '',
   supportEmail: e.SUPPORT_EMAIL || 'support@example.com',
+  inquiryEmail: e.INQUIRY_EMAIL || 'connect@mygoldenopinions.com', // "Run a survey with us" requests are emailed here
   sessionDays: +(e.SESSION_DAYS || 60),
   adminSessionHours: +(e.ADMIN_SESSION_HOURS || 12),
   twilio: { sid: e.TWILIO_ACCOUNT_SID || '', token: e.TWILIO_AUTH_TOKEN || '', messagingService: e.TWILIO_MESSAGING_SERVICE_SID || '', from: e.TWILIO_FROM || '' },

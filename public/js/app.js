@@ -93,7 +93,7 @@ const unread = () => { const seen = LS.get('seen', []); return myMessages().filt
 function render() {
   const app = $('#app');
   if (S.view === 'loading') { app.innerHTML = `<div class="wrap"><div class="loading"><div class="spin"></div></div></div>`; return; }
-  const V = { splash: viewSplash, login: viewLogin, verify: viewVerify, home: viewHome, take: viewTake, review: viewReview, done: viewDone, inbox: viewInbox, legal: viewLegal, recover: viewRecover, settings: viewSettings, winners: viewWinners, claim: viewClaim };
+  const V = { splash: viewSplash, login: viewLogin, verify: viewVerify, home: viewHome, take: viewTake, review: viewReview, done: viewDone, inbox: viewInbox, legal: viewLegal, biz: viewBiz, recover: viewRecover, settings: viewSettings, winners: viewWinners, claim: viewClaim };
   app.innerHTML = (V[S.view] || viewSplash)();
   translateDOM(app); document.documentElement.lang = curLang();
   app.querySelectorAll('[data-autofocus]').forEach(e => e.focus());
@@ -157,7 +157,8 @@ function viewClaim(){
 }
 function adminLink(){return ''}
 function footer(){
-  return `<div class="statusbar">${S.pub.testMode?'Test mode · texts and emails are not really sent':''}<br><a href="#" data-act="legal" data-k="terms">Terms</a> · <a href="#" data-act="legal" data-k="privacy">Privacy</a> · <a href="#" data-act="legal" data-k="rules">Official Rules</a><br>${adminLink()}</div>`;
+  return `<div class="bizcta"><div class="small" style="font-weight:800">${T('Need customer opinions for your business?','¿Necesitas la opinión de clientes para tu negocio?')}</div><button class="btn sm gold" data-act="biz">${T('Run a survey with us','Haz una encuesta con nosotros')}</button></div>
+  <div class="statusbar">${S.pub.testMode?'Test mode · texts and emails are not really sent':''}<br><a href="#" data-act="legal" data-k="terms">Terms</a> · <a href="#" data-act="legal" data-k="privacy">Privacy</a> · <a href="#" data-act="legal" data-k="rules">Official Rules</a><br>${adminLink()}</div>`;
 }
 
 /* splash */
@@ -424,6 +425,26 @@ function viewDone(){
   </div>`;
 }
 
+/* "Run a survey with us": businesses ask us to run a survey for them. Emailed to the team and listed in the admin console. */
+function viewBiz(){
+  const B=S.biz||(S.biz={}); const m=me()||{};
+  if(B.sent) return `<div class="wrap"><div class="topbar"><button class="iconbtn" data-act="bizBack" aria-label="Back">←</button><h2 style="margin:0">${T('Thank you!','¡Gracias!')}</h2>${langToggle()}</div>
+    <div class="card center" style="padding:28px 20px"><div style="font-size:44px">📬</div><h2 style="margin:8px 0">${T("We've got your request","Recibimos tu solicitud")}</h2><p class="muted">${T(`Someone from our team will contact you at <b>${esc(B.email)}</b>, usually within one business day.`,`Alguien de nuestro equipo te escribirá a <b>${esc(B.email)}</b>, normalmente en un día hábil.`)}</p><button class="btn gold block" data-act="bizBack" style="margin-top:14px">${T('Done','Listo')}</button></div></div>`;
+  const v=k=>esc(B[k]??(k==='name'?[m.firstName,m.lastName].filter(Boolean).join(' '):k==='email'?m.email||'':k==='phone'&&m.phone?fmtPhone(m.phone):''));
+  return `<div class="wrap"><div class="topbar"><button class="iconbtn" data-act="bizBack" aria-label="Back">←</button><h2 style="margin:0">${T('Run a survey with us','Haz una encuesta con nosotros')}</h2>${langToggle()}</div>
+  <div class="card"><p class="muted" style="margin-top:0">${T('Golden Opinions gets you honest answers from real people, fast. Tell us what you want to learn and we\'ll get back to you with ideas and pricing.','Golden Opinions te da respuestas honestas de personas reales, rápido. Cuéntanos qué quieres saber y te responderemos con ideas y precios.')}</p>
+  <form id="bizForm" novalidate>
+    <label class="f" for="bzName">${T('Your name','Tu nombre')} *</label><input class="in" id="bzName" name="name" autocomplete="name" value="${v('name')}" maxlength="100">
+    <label class="f" for="bzCo">${T('Company or organization','Empresa u organización')}</label><input class="in" id="bzCo" name="company" autocomplete="organization" value="${v('company')}" maxlength="120">
+    <label class="f" for="bzEmail">${T('Email','Correo electrónico')} *</label><input class="in" id="bzEmail" name="email" type="email" autocomplete="email" value="${v('email')}" maxlength="200">
+    <label class="f" for="bzPhone">${T('Phone (optional)','Teléfono (opcional)')}</label><input class="in" id="bzPhone" name="phone" type="tel" autocomplete="tel" value="${v('phone')}">
+    <label class="f" for="bzMsg">${T('What would you like to learn?','¿Qué te gustaría saber?')} *</label><textarea class="in" id="bzMsg" name="message" rows="5" maxlength="3000" placeholder="${T('Who you want to hear from, what you want to ask, and when you need results','A quién quieres escuchar, qué quieres preguntar y cuándo necesitas los resultados')}">${esc(B.message||'')}</textarea>
+    <div class="hp" aria-hidden="true"><label>Website<input name="website" tabindex="-1" autocomplete="off"></label></div>
+    ${B.err?`<div class="err">${esc(B.err)}</div>`:''}
+    <button class="btn gold block big" type="submit" style="margin-top:14px">${T('Send request','Enviar solicitud')}</button>
+    <p class="faint tiny" style="margin:10px 0 0">${T('Or email us at','O escríbenos a')} <a href="mailto:${esc(S.pub.inquiryEmail||'connect@mygoldenopinions.com')}">${esc(S.pub.inquiryEmail||'connect@mygoldenopinions.com')}</a>. ${T('We use these details only to reply to you.','Usamos estos datos solo para responderte.')}</p>
+  </form></div></div>`;
+}
 /* legal: the Terms, Privacy Policy and Official Rules are the company's documents in /public/legal, also served as web pages at /terms, /privacy and /rules */
 const LEGAL_DOCS={terms:['Terms & Conditions','Términos y condiciones'],privacy:['Privacy Policy','Política de privacidad'],rules:['Official Rules','Reglas oficiales']};
 async function loadLegal(k){
@@ -474,6 +495,8 @@ const ACT = {
   authMode(t) { captureLogin(); S.authMode = t.dataset.k; if (S.login) S.login.err = ''; go('login'); },
   legal(t) { if (S.view === 'login') captureLogin(); S.legalFrom = S.view === 'legal' ? S.legalFrom : S.view; S.legal = t.dataset.k; go('legal'); },
   legalBack() { go(S.legalFrom || 'splash'); },
+  biz() { if (S.view === 'login') captureLogin(); S.bizFrom = S.view === 'biz' ? S.bizFrom : S.view; S.biz = {}; go('biz'); },
+  bizBack() { S.biz = {}; go(S.bizFrom || 'splash'); },
   async logout() { await busy(async () => { await api('POST', '/api/auth/logout'); S.my = null; S.login = null; go('splash'); }); },
   async resend() { await busy(async () => { const r = await api('POST', '/api/auth/resend'); if (S.login) { S.login.devCode = r.devCode; S.login.verr = ''; } if (S.rec) S.rec.devCode = r.devCode; if (S.chg) S.chg.devCode = r.devCode; render(); toast('New code sent'); }); },
   async optin(t) { const v = t.checked; await busy(async () => { const r = await api('PUT', '/api/me/prefs', { optIn: v }); S.my.me = r.me; toast(v ? 'Alerts turned on' : 'Alerts turned off'); }); },
@@ -554,6 +577,14 @@ document.addEventListener('change', e => { const t = e.target; if (t.dataset.kin
 
 document.addEventListener('submit', async e => {
   e.preventDefault(); const f = e.target;
+  if (f.id === 'bizForm') {
+    const fd = new FormData(f); const B = S.biz = Object.fromEntries(fd); delete B.website;
+    await busy(async () => {
+      try { await api('POST', '/api/inquiries', { ...Object.fromEntries(fd), lang: curLang() }); S.biz = { sent: true, email: B.email }; render(); window.scrollTo(0, 0); }
+      catch (e) { B.err = e.message; render(); const el = e.field && document.querySelector(`#bizForm [name=${e.field}]`); if (el) el.focus(); }
+    });
+    return;
+  }
   if (f.id === 'loginForm') {
     captureLogin(); const Lg = S.login; const signup = S.authMode === 'signup';
     await busy(async () => {

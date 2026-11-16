@@ -2,9 +2,10 @@
 import { randomBytes } from 'node:crypto';
 import { config } from './config.js';
 import { all, get, run, tx, rowParticipant, rowSurvey, rowResponse, rowWinner, saveParticipant, saveWinner, getSetting, audit } from './db.js';
+const escHtml = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 import { HttpError, bad, newId, sha256, sixDigits, jsonBody, sendJson, createSession, readSession, endSession, rateLimit, clientIp, safeEqual } from './http.js';
 import { T as MSG, sendBoth, queueSms, queueEmail, checkUnsubToken } from './messaging.js';
-import { STATES, normPhone, emailOk, maskPhone, maskEmail, localDay, addDays, wStatus, cleanAnswers, L, winnersCountOf, tiersOf, noteOzOf, notesOf, winnerGoldOz, surveyPrizeShort, topPrizeValue, WIN_CAP } from '../public/js/shared.js';
+import { STATES, fmtPhone, normPhone, emailOk, maskPhone, maskEmail, localDay, addDays, wStatus, cleanAnswers, L, winnersCountOf, tiersOf, noteOzOf, notesOf, winnerGoldOz, surveyPrizeShort, topPrizeValue, WIN_CAP } from '../public/js/shared.js';
 
 const today = () => localDay(Date.now(), config.timeZone);
 const PENDING_SECONDS = 15 * 60;
@@ -80,13 +81,36 @@ function publicSurvey(s, withQuestions) {
 
 /* ---------- routes ---------- */
 export function participantRoutes(r) {
+  /* "Run a survey with us": a business asks about having a survey run. Public (no log-in). Saved for the admin console and emailed to config.inquiryEmail. */
+  r.post('/api/inquiries', async (req, res) => {
+    const b = await jsonBody(req);
+    if (String(b.website || '').trim()) return sendJson(res, 200, { ok: true }); // hidden field only bots fill in
+    rateLimit('inquiry:ip:' + clientIp(req), 5, 3600);
+    const clip = (v, n) => String(v ?? '').replace(/\s+$/g, '').trim().slice(0, n);
+    const d = { name: clip(b.name, 100), company: clip(b.company, 120), email: clip(b.email, 200).toLowerCase(), phone: '', message: clip(b.message, 3000), lang: b.lang === 'es' ? 'es' : 'en' };
+    const es = d.lang === 'es';
+    if (d.name.length < 2) throw bad(es ? 'Escribe tu nombre.' : 'Please enter your name.', { field: 'name' });
+    if (!emailOk(d.email)) throw bad(es ? 'Escribe un correo electrónico válido.' : 'Please enter a valid email address.', { field: 'email' });
+    if (String(b.phone || '').trim()) { d.phone = normPhone(b.phone); if (!d.phone) throw bad(es ? 'Escribe un número de teléfono de EE. UU. válido, o déjalo en blanco.' : 'Please enter a valid US phone number, or leave it blank.', { field: 'phone' }); }
+    if (d.message.length < 10) throw bad(es ? 'Cuéntanos un poco sobre la encuesta que quieres hacer.' : 'Please tell us a little about the survey you have in mind.', { field: 'message' });
+    const id = newId('inq_'); const now = Date.now();
+    run('INSERT INTO inquiries (id, created_at, updated_at, status, data) VALUES (?, ?, ?, ?, ?)', id, now, now, 'new', JSON.stringify(d));
+    audit(null, 'inquiry.create', { id });
+    const when = new Date(now).toLocaleString('en-US', { timeZone: config.timeZone, dateStyle: 'medium', timeStyle: 'short' });
+    const lines = [['Name', d.name], ['Company', d.company || '—'], ['Email', d.email], ['Phone', d.phone ? fmtPhone(d.phone) : '—'], ['Language', es ? 'Spanish' : 'English'], ['Received', when]];
+    const text = `New request to run a survey with Golden Opinions.\n\n${lines.map(([k, v]) => `${k}: ${v}`).join('\n')}\n\nMessage:\n${d.message}\n\nReply to this email to answer ${d.name} directly. It's also in the admin console under Inquiries: ${config.publicUrl}/admin`;
+    const html = `<div style="font-family:Arial,sans-serif;font-size:15px;color:#1d2433"><p><b>New request to run a survey with Golden Opinions.</b></p><table style="border-collapse:collapse">${lines.map(([k, v]) => `<tr><td style="padding:4px 14px 4px 0;color:#667">${k}</td><td style="padding:4px 0"><b>${escHtml(v)}</b></td></tr>`).join('')}</table><p style="margin-top:16px;color:#667">Message</p><p style="white-space:pre-wrap;border-left:3px solid #d4a52a;padding-left:12px">${escHtml(d.message)}</p><p style="color:#667;font-size:13px">Reply to this email to answer ${escHtml(d.name)} directly. It's also in the <a href="${config.publicUrl}/admin">admin console</a> under Inquiries.</p></div>`;
+    queueEmail(config.inquiryEmail, `New survey inquiry: ${d.company || d.name}`, text, html, 'inquiry', d.email);
+    sendJson(res, 200, { ok: true });
+  });
+
   // Public home data: live surveys and recent winners (public fields only). No dollar values are ever sent to participants.
   r.get('/api/public', async (req, res) => {
     const surveys = all("SELECT * FROM surveys WHERE status = 'live' ORDER BY created_at DESC").map(rowSurvey).filter(isLive).map(s => publicSurvey(s));
     const t = today();
     const winners = all("SELECT * FROM winners WHERE status IN ('claimed','shipped') ORDER BY draw_date DESC, created_at DESC LIMIT 200").map(rowWinner)
       .filter(w => ['claimed', 'shipped'].includes(wStatus(w, t)) && w.consentPublish !== false);
-    sendJson(res, 200, { surveys, winners: winners.slice(0, 25).map(publicWinner), winnerCount: winners.length, testMode: !config.smsEnabled && !config.emailEnabled, supportEmail: config.supportEmail });
+    sendJson(res, 200, { surveys, winners: winners.slice(0, 25).map(publicWinner), winnerCount: winners.length, testMode: !config.smsEnabled && !config.emailEnabled, supportEmail: config.supportEmail, inquiryEmail: config.inquiryEmail });
   });
 
   /* ----- sign up / log in with a 6-digit code ----- */

@@ -1,7 +1,7 @@
 // Admin API (staff only). Log-in = email + password + a 6-digit code emailed to the staff member.
 import { randomInt } from 'node:crypto';
 import { config } from './config.js';
-import { all, get, run, tx, rowParticipant, rowSurvey, rowResponse, rowWinner, saveSurvey, saveWinner, getSetting, setSetting, audit, parse } from './db.js';
+import { all, get, run, tx, rowParticipant, rowSurvey, rowResponse, rowWinner, rowInquiry, saveSurvey, saveWinner, getSetting, setSetting, audit, parse } from './db.js';
 import { HttpError, bad, newId, sha256, sixDigits, jsonBody, sendJson, createSession, readSession, endSession, rateLimit, clientIp, checkPassword, safeEqual } from './http.js';
 import { T as MSG, queueEmail, queueSms, sendBoth } from './messaging.js';
 import { WIN_CAP, CLAIM_DAYS, STATES, localDay, addDays, wStatus, surveyProblems, estValue, surveyRateOf, topPrizeValue, prizeLabel, shortPrize, winnersCountOf, fmtPhone, answerText, L, tiersOf, noteOzOf, notesOf, goldOzOf, placeLabel, PLACES, DEFAULT_NOTE_OZ, POOL_CAP, poolValue, surveyPrizeShort, fmtOz, topGoldOz, summaryOf, fmtPct } from '../public/js/shared.js';
@@ -82,10 +82,22 @@ export function adminRoutes(r) {
       responses: all('SELECT * FROM responses').map(rowResponse),
       winners: all('SELECT * FROM winners ORDER BY draw_date DESC, created_at DESC').map(rowWinner),
       campaigns: all('SELECT * FROM campaigns ORDER BY sent_at DESC').map(c => ({ ...parse(c.data), id: c.id, sentAt: c.sent_at })),
+      inquiries: all('SELECT * FROM inquiries ORDER BY created_at DESC LIMIT 500').map(rowInquiry), inquiryEmail: config.inquiryEmail,
       settings: { goldback: getSetting('goldback'), goldnote: { noteOz: noteOzSetting() } },
       outbox: { queued: get("SELECT COUNT(*) n FROM outbox WHERE status = 'queued'").n, failed: get("SELECT COUNT(*) n FROM outbox WHERE status = 'failed'").n },
       smsEnabled: config.smsEnabled, emailEnabled: config.emailEnabled,
     });
+  });
+
+  /* ----- business inquiries ("Run a survey with us") ----- */
+  r.put('/api/admin/inquiries/:id', async (req, res, { params }) => {
+    const a = requireAdmin(req); const b = await jsonBody(req);
+    const row = get('SELECT * FROM inquiries WHERE id = ?', params.id); if (!row) throw new HttpError(404, 'Inquiry not found');
+    const cur = rowInquiry(row); const status = ['new', 'contacted', 'won', 'closed'].includes(b.status) ? b.status : cur.status;
+    const data = { ...parse(row.data), notes: b.notes !== undefined ? String(b.notes).slice(0, 5000) : cur.notes || '' };
+    run('UPDATE inquiries SET status = ?, data = ?, updated_at = ? WHERE id = ?', status, JSON.stringify(data), Date.now(), params.id);
+    audit(a.id, 'inquiry.update', { id: params.id, status });
+    sendJson(res, 200, { inquiry: rowInquiry(get('SELECT * FROM inquiries WHERE id = ?', params.id)) });
   });
 
   /* ----- surveys ----- */

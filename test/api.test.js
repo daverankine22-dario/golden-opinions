@@ -176,6 +176,21 @@ test('campaign respects opt-in and language; unsubscribe link works', async () =
   assert.ok((await u.text()).includes('unsubscribed'));
 });
 
+test('business inquiry: saved, emailed to the team, managed in admin', async () => {
+  const anon = new Client();
+  const badReq = await anon.post('/api/inquiries', { name: 'Al', email: 'nope', message: 'We want a survey' }); assert.equal(badReq.status, 400); assert.equal(badReq.body.field, 'email');
+  const ok = await anon.post('/api/inquiries', { name: 'Maria Lopez', company: 'Sunrise Coffee', email: 'Maria@Sunrise.example', phone: '480-555-0101', message: 'We want to survey 500 coffee drinkers in Arizona about new flavors.', lang: 'en' });
+  assert.equal(ok.status, 200);
+  const bot = await anon.post('/api/inquiries', { name: 'Bot', email: 'b@b.example', message: 'spam spam spam spam', website: 'http://spam' }); assert.equal(bot.status, 200);
+  const rows = db.all('SELECT * FROM inquiries'); assert.equal(rows.length, 1, 'honeypot submissions are not saved');
+  const mail = db.get("SELECT * FROM outbox WHERE kind = 'inquiry'"); assert.equal(mail.to_addr, 'connect@mygoldenopinions.com');
+  assert.match(mail.subject, /Sunrise Coffee/); const mb = JSON.parse(mail.body); assert.equal(mb.replyTo, 'maria@sunrise.example'); assert.match(mb.text, /\(480\) 555-0101/); assert.match(mb.text, /coffee drinkers/);
+  const d = await admin.get('/api/admin/data'); assert.equal(d.body.inquiries[0].company, 'Sunrise Coffee'); assert.equal(d.body.inquiries[0].status, 'new');
+  const up = await admin.put('/api/admin/inquiries/' + d.body.inquiries[0].id, { status: 'contacted', notes: 'Called Tue' });
+  assert.equal(up.body.inquiry.status, 'contacted'); assert.equal(up.body.inquiry.notes, 'Called Tue'); assert.equal(up.body.inquiry.company, 'Sunrise Coffee');
+  assert.equal((await anon.put('/api/admin/inquiries/' + d.body.inquiries[0].id, { status: 'closed' })).status, 401);
+});
+
 test('legal documents are served as pages and app fragments', async () => {
   for (const [path, title] of [['/terms', 'Terms and Conditions'], ['/privacy', 'Privacy Policy'], ['/rules', 'Official Rules'], ['/official-rules', 'Official Rules']]) {
     const r = await fetch(base + path); assert.equal(r.status, 200, path); const h = await r.text();
