@@ -176,7 +176,7 @@ function viewSplash(){
   ${me()?`<button class="btn gold big" data-act="home">Continue to surveys</button><div class="center small muted" style="margin-top:10px">Signed in as ${esc(me().firstName||me().email)} · <a href="#" data-act="logout">Not you?</a></div>`
   :`<button class="btn gold big" data-act="authMode" data-k="signup">Create account</button><div style="height:10px"></div><button class="btn big" data-act="authMode" data-k="login">I already have an account</button>`}
   <div class="npn">No Purchase Necessary</div>
-  <div style="display:flex;gap:10px;max-width:calc(100% - 120px)"><button class="btn sm" data-act="legal" data-k="terms">Terms &amp; Conditions</button><button class="btn sm" data-act="legal" data-k="rules">Official Rules</button></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><button class="btn sm" data-act="legal" data-k="terms">Terms &amp; Conditions</button><button class="btn sm" data-act="legal" data-k="privacy">Privacy Policy</button><button class="btn sm" data-act="legal" data-k="rules">Official Rules</button></div>
   ${footer()}
   <img class="mascot" src="${MASCOT}" alt="">
   </div>`;
