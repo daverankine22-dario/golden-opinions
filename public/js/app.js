@@ -203,6 +203,7 @@ function viewLogin(){
     <select class="in" id="st" required><option value="">Choose your state…</option>${STATES.map(s=>`<option ${L.state===s?'selected':''}>${s}</option>`).join('')}</select>
     <div class="note" style="margin-top:12px">🔒 Your full name stays private. If you win, we only show your first name, last initial and state, like <b>Betty W - California</b>.</div>
     <label class="check"><input type="checkbox" id="agree" ${L.agree?'checked':''}><span>I'm 18 or older and agree to the <a href="#" data-act="legal" data-k="terms">Terms</a>, <a href="#" data-act="legal" data-k="rules">Official Rules</a> and <a href="#" data-act="legal" data-k="privacy">Privacy Policy</a>.</span></label>
+    <p class="faint tiny notr" style="margin:8px 2px 0">${T('Golden Opinions is free because businesses pay us for survey results. They only get combined or de-identified answers, never your name, email or phone number.','Golden Opinions es gratis porque las empresas nos pagan por los resultados de las encuestas. Solo reciben respuestas combinadas o anónimas, nunca tu nombre, correo ni teléfono.')}</p>
     <label class="check"><input type="checkbox" id="optin" ${L.optIn?'checked':''}><span>Text and email me when new surveys go live. Msg &amp; data rates may apply. Reply STOP to opt out. Optional.</span></label>`:''}
     ${L.err?`<div class="err">${L.err}</div>`:''}
     <div style="height:18px"></div>
